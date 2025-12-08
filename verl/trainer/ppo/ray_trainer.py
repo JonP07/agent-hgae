@@ -94,6 +94,7 @@ class AdvantageEstimator(str, Enum):
     RLOO = "rloo"
     GRPO_PASSK = "grpo_passk"
     GiGPO = 'gigpo'
+    HGAE = "hgae"
 
 
 @dataclass
@@ -1085,6 +1086,16 @@ class RayPPOTrainer:
                                                                 envs=self.envs,
                                                                 is_train=True,
                                                                 )
+                        # # inspect generated content for debugging
+                        # for i in range(len(gen_batch_output.batch['input_ids'])):
+                        #     input_ids = gen_batch_output.batch['input_ids'][i]
+                        #     response_ids = gen_batch_output.batch['responses'][i]
+                        #     input_text = self.tokenizer.decode(input_ids, skip_special_tokens=True)
+                        #     response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
+                        #     print(f"Input {i}: {input_text}")
+                        #     print(f"Response {i}: {response_text}")
+                        #     print("------")
+                        # print('generation end')
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
                         with _timer("gen_max", timing_raw):
                             gen_baseline_batch = deepcopy(gen_batch)

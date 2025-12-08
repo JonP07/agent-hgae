@@ -98,7 +98,59 @@ class SimpleMemory(BaseMemory):
             valid_lengths.append(valid_len)
 
         return memory_contexts, valid_lengths
-    
+
+    def fetch_options(
+        self,
+        history_length: int,
+        obs_key: str = "text_obs",
+        action_key: str = "action",
+        subgoal_key: str = "subgoal",
+        switch_key: str = "switch",
+    ) -> Tuple[List[str], List[int], List[str], List[str]]:
+        """
+        Fetch and format recent interaction history for each environment instance.
+        Args:
+            history_length (int):
+                Maximum number of past steps to retrieve per environment.
+            obs_key (str, default="text_obs"):
+                The key name used to access the observation in stored records.
+                For example: "text_obs" or "Observation", depending on the environment.
+            action_key (str, default="action"):
+                The key name used to access the action in stored records.
+                For example: "action" or "Action".
+            subgoal_key (str, default="subgoal"):
+                The key name used to access the subgoal in stored records.
+            switch_key (str, default="switch"):
+                The key name used to access the switch decision in stored records.
+            """
+        memory_contexts, valid_lengths, subgoals, switches = [], [], [], []
+
+        for env_idx in range(self.batch_size):
+            recent = self._data[env_idx][-history_length:]
+            valid_len = len(recent)
+            start_idx = len(self._data[env_idx]) - valid_len
+
+            lines = []
+            for j, rec in enumerate(recent):
+                step_num = start_idx + j + 1
+                act = rec[action_key]
+                obs = rec[obs_key]
+                lines.append(
+                    f"[Observation {step_num}: '{obs}', Action {step_num}: '{act}']"
+                )
+
+            memory_contexts.append("\n".join(lines))
+            valid_lengths.append(valid_len)
+            # get the latest subgoal and switch decision
+            if valid_len > 0:
+                subgoals.append(recent[-1][subgoal_key])
+                switches.append(recent[-1][switch_key])
+            else:
+                subgoals.append("")
+                switches.append("")
+
+        return memory_contexts, valid_lengths, subgoals, switches
+        
 
 class SearchMemory(BaseMemory):
     """

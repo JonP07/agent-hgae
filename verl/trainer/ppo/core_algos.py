@@ -108,6 +108,140 @@ def compute_gae_advantage_return(
         advantages = verl_F.masked_whiten(advantages, response_mask)
     return advantages, returns
 
+def compute_hier_gae_advantage_return(
+    rewards: torch.Tensor,        # shape: (B, T)
+    v_low: torch.Tensor,          # shape: (B, T + 1)
+    v_high: torch.Tensor,         # shape: (B, T + 1)
+    boundary_mask: torch.Tensor,  # shape: (B, T), bool or {0,1}; 1 = new option starts at t
+    gamma: torch.Tensor,
+    lam_low: torch.Tensor,
+    lam_high: torch.Tensor,
+):
+    """
+    Hierarchical GAE with two critics.
+
+    Args:
+        rewards: (B, T)
+        v_low: (B, T + 1)
+        v_high: (B, T + 1)
+        boundary_mask: (B, T) boolean or {0,1}
+            boundary_mask[b, t] == 1 means a NEW option starts at step t in batch b.
+            Assumes boundary_mask[b, 0] == 1 for valid trajectories.
+        gamma: scalar tensor
+        lam_low: scalar tensor for low-level GAE
+        lam_high: scalar tensor for high-level (segment-level) GAE
+
+    Returns:
+        adv_low: (B, T)
+            low-level advantages at every step.
+        ret_low: (B, T)
+            low-level returns (adv_low + v_low[:, :-1]).
+        adv_high: (B, T)
+            high-level advantages, non-zero ONLY at segment start steps (boundary_mask == 1).
+        ret_high: (B, T)
+            high-level "returns" for value targets, non-zero ONLY at segment start steps.
+            You typically apply the high-level value loss only where boundary_mask == 1.
+    """
+    # TODO: not tested yet
+    with torch.no_grad():
+        B, T = rewards.shape
+        device = rewards.device
+        dtype = rewards.dtype
+
+        # Sanity checks: v_* must have one extra time step for bootstrap
+        assert v_low.shape == (B, T + 1)
+        assert v_high.shape == (B, T + 1)
+
+        # Ensure boundary_mask is boolean
+        boundary = boundary_mask.bool()
+
+        gamma_f = float(gamma.item() if isinstance(gamma, torch.Tensor) else gamma)
+        lam_low_f = float(lam_low.item() if isinstance(lam_low, torch.Tensor) else lam_low)
+        lam_high_f = float(lam_high.item() if isinstance(lam_high, torch.Tensor) else lam_high)
+
+        # ------------------------
+        # 1) Low-level GAE per step (reset at segment starts)
+        # ------------------------
+        adv_low = torch.zeros(B, T, device=device, dtype=dtype)
+
+        for b in range(B):
+            lastgaelam = torch.zeros((), device=device, dtype=dtype)
+            # go backwards in time
+            for t in reversed(range(T)):
+                if boundary[b, t]:
+                    # reset recursion at segment starts
+                    lastgaelam.zero_()
+                next_v = v_low[b, t + 1]
+                delta = rewards[b, t] + gamma_f * next_v - v_low[b, t]
+                lastgaelam = delta + gamma_f * lam_low_f * lastgaelam
+                adv_low[b, t] = lastgaelam
+
+        ret_low = adv_low + v_low[:, :-1]  # (B, T)
+
+        # ------------------------
+        # 2) High-level GAE over segments (boundary-defined)
+        # ------------------------
+        adv_high = torch.zeros(B, T, device=device, dtype=dtype)
+        ret_high = torch.zeros(B, T, device=device, dtype=dtype)
+
+        for b in range(B):
+            # segment starts indices for this batch element
+            starts = torch.nonzero(boundary[b], as_tuple=False).flatten()
+            if starts.numel() == 0:
+                continue  # no segments => no high-level updates
+
+            K = starts.numel()
+            deltas = torch.zeros(K, device=device, dtype=dtype)
+            gammas_seg = torch.zeros(K, device=device, dtype=dtype)
+
+            # compute segment-wise deltas
+            for k in range(K):
+                s_k = int(starts[k].item())
+                if k + 1 < K:
+                    e_k = int(starts[k + 1].item()) - 1
+                else:
+                    e_k = T - 1
+                length_k = e_k - s_k + 1
+
+                # discounted segment return R_k
+                seg_rewards = rewards[b, s_k : e_k + 1]  # (length_k,)
+                # gamma^0, gamma^1, ..., gamma^{length_k-1}
+                discounts = torch.pow(
+                    torch.tensor(gamma_f, device=device, dtype=dtype),
+                    torch.arange(length_k, device=device, dtype=dtype),
+                )
+                R_k = torch.sum(seg_rewards * discounts)
+
+                V_s = v_high[b, s_k]
+
+                if k + 1 < K:
+                    # bootstrapping from next segment start
+                    s_next = int(starts[k + 1].item())
+                    V_next = v_high[b, s_next]
+                    gamma_seg = gamma_f ** length_k
+                else:
+                    # last segment: no future option
+                    V_next = torch.zeros_like(V_s)
+                    gamma_seg = 0.0
+
+                deltas[k] = R_k + gamma_seg * V_next - V_s
+                gammas_seg[k] = gamma_seg
+
+            # GAE over the segment chain (from last segment backwards)
+            A_seg = torch.zeros(K, device=device, dtype=dtype)
+            lastgaelam_seg = torch.zeros((), device=device, dtype=dtype)
+
+            for k in reversed(range(K)):
+                lastgaelam_seg = deltas[k] + gammas_seg[k] * lam_high_f * lastgaelam_seg
+                A_seg[k] = lastgaelam_seg
+
+            # write back: only at segment starts
+            for k in range(K):
+                s_k = int(starts[k].item())
+                adv_high[b, s_k] = A_seg[k]
+                ret_high[b, s_k] = A_seg[k] + v_high[b, s_k]
+
+        return adv_low, ret_low, adv_high, ret_high
 
 # NOTE(sgm): this implementation only consider outcome supervision, where the reward is a scalar.
 def compute_grpo_outcome_advantage(

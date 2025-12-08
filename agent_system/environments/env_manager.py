@@ -241,6 +241,119 @@ class AlfWorldEnvironmentManager(EnvironmentManagerBase):
                 success[f"{task}_success_rate"].append(won_value)
                 break
 
+class AlfWorldEnvironmentManagerOptions(EnvironmentManagerBase):
+    def __init__(self, envs, projection_f, config):
+        self.memory = SimpleMemory()
+        super().__init__(envs, projection_f, config)
+    
+    def reset(self, kwargs):
+        text_obs, image_obs, infos = self.envs.reset()
+        self.gamefile = parse_gamefile(infos)
+        # initialize the history buffer
+        self.memory.reset(batch_size = len(text_obs))
+        self.tasks = []
+        self.pre_text_obs = text_obs
+        self.extract_task(text_obs)
+
+        full_text_obs = self.build_text_obs(text_obs, self.envs.get_admissible_commands, init=True)
+        return {'text': full_text_obs, 'image': image_obs, 'anchor': text_obs}, infos
+    
+    def step(self, text_actions: List[str]):
+        actions, subgoals, switches, valids = self.projection_f(text_actions, self.envs.get_admissible_commands)
+        text_obs, image_obs, rewards, dones, infos = self.envs.step(actions)
+        self.memory.store({'text_obs': self.pre_text_obs, 'action': actions, 'subgoal': subgoals, 'switch': switches})
+        self.pre_text_obs = text_obs
+
+        full_text_obs = self.build_text_obs(text_obs, self.envs.get_admissible_commands)
+        if infos[0].get("extra.gamefile") is None:
+            infos = set_gamefile(infos, self.gamefile)
+
+        # add action_valid to infos
+        for i, info in enumerate(infos):
+            info['is_action_valid'] = to_numpy(valids[i])
+
+        next_observations = {'text': full_text_obs, 'image': image_obs, 'anchor': text_obs}
+        rewards = to_numpy(rewards)
+        dones = to_numpy(dones)
+
+        return next_observations, rewards, dones, infos
+    
+    def extract_task(self, text_obs: List[str]):
+        for obs in text_obs:
+            task_start = obs.find('Your task is to: ')
+            
+            if task_start != -1:
+                self.tasks.append(obs[task_start + len('Your task is to: '):].strip())
+            else:
+                raise ValueError("Task description not found in text observation.")
+
+    def build_text_obs(self, text_obs: List[str], admissible_actions: List[List[str]], init: bool = False) -> List[str]:
+        """
+        This function builds the text observation for the agent.
+        """
+        postprocess_text_obs = []
+        if not init and self.config.env.history_length > 0:
+            memory_contexts, valid_lens, subgoals, switches = self.memory.fetch_options(
+                    self.config.env.history_length,
+                    obs_key="text_obs",
+                    action_key="action",
+                    subgoal_key="subgoal",
+                    switch_key="switch")
+            
+        for i in range(len(text_obs)):
+            # exclude 'help' in admissible_actions[i]
+            reformatted_admissible_actions = "\n ".join(f"'{s}'" for s in admissible_actions[i] if s != 'help')
+
+            if init or self.config.env.history_length <= 0:
+                obs = ALFWORLD_TEMPLATE_OPTIONS_NO_HIS.format(
+                    current_observation=text_obs[i],
+                    current_subgoal="None",
+                    admissible_actions=reformatted_admissible_actions
+                )
+            else:
+                obs = ALFWORLD_TEMPLATE_OPTIONS.format(
+                    task_description=self.tasks[i],
+                    step_count=len(self.memory[i]),
+                    history_length=valid_lens[i],
+                    action_history=memory_contexts[i],
+                    current_step=len(self.memory[i]) + 1,
+                    current_observation=text_obs[i],
+                    current_subgoal=subgoals[i],
+                    admissible_actions=reformatted_admissible_actions
+                )
+
+            postprocess_text_obs.append(obs)
+        return postprocess_text_obs
+
+    def _process_batch(self, batch_idx, total_batch_list, total_infos, success):
+        # Find the last entry with active masks
+        for i in reversed(range(len(total_batch_list[batch_idx]))):
+            batch_item = total_batch_list[batch_idx][i]
+            if batch_item['active_masks']:
+                info = total_infos[batch_idx][i]
+                won_value = float(info['won'])
+                success['success_rate'].append(won_value)
+                
+                # Process game file if it exists
+                gamefile = info.get("extra.gamefile")
+                if gamefile:
+                    self._process_gamefile(gamefile, won_value, success)
+                return  # Exit after finding the first active mask
+
+    def _process_gamefile(self, gamefile, won_value, success):
+        tasks = [
+            "pick_and_place",
+            "pick_two_obj_and_place",
+            "look_at_obj_in_light",
+            "pick_heat_then_place_in_recep",
+            "pick_cool_then_place_in_recep",
+            "pick_clean_then_place_in_recep",
+        ]
+        
+        for task in tasks:
+            if task in gamefile:
+                success[f"{task}_success_rate"].append(won_value)
+                break
 
 class SokobanEnvironmentManager(EnvironmentManagerBase):
     ACTION_LOOKUP = {
@@ -633,6 +746,16 @@ def make_envs(config):
             alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
         elif config.env.env_name == 'alfworld/AlfredTWEnv':
             alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
+        elif config.env.env_name == 'alfworld/AlfredTWEnvOptions':
+            alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
+            from agent_system.environments.env_package.alfworld import alfworld_projection_options
+            projection_f = partial(alfworld_projection_options)
+            _envs = build_alfworld_envs(alf_config_path, config.env.seed, config.data.train_batch_size, group_n, is_train=True, env_kwargs={}, resources_per_worker=resources_per_worker)
+            _val_envs = build_alfworld_envs(alf_config_path, config.env.seed + 1000, config.data.val_batch_size, 1, is_train=False, env_kwargs={}, resources_per_worker=resources_per_worker)
+            
+            envs = AlfWorldEnvironmentManagerOptions(_envs, projection_f, config)
+            val_envs = AlfWorldEnvironmentManagerOptions(_val_envs, projection_f, config)
+            return envs, val_envs
         else:
             raise ValueError(f"Unsupported environment: {config.env.env_name}")
 
@@ -697,3 +820,59 @@ def make_envs(config):
     else:
         print("Environment not supported")
         exit(1)
+
+if __name__ == "__main__":
+    # test alfworld env manager
+    from agent_system.environments.env_package.alfworld import build_alfworld_envs, alfworld_projection, alfworld_projection_options
+
+    cfg = OmegaConf.create({
+        "env": {
+            "env_name": "alfworld/AlfredTWEnv",
+            "seed": 0,
+            "history_length": 1,
+            "max_steps": 5,
+            "rollout": {"n": 1},
+            "resources_per_worker": {"num_cpus": 0.1, "num_gpus": 0},
+            "alfworld": {"eval_dataset": "eval_in_distribution"},
+        },
+        "data": {"train_batch_size": 1, "val_batch_size": 1},
+    })
+
+    mock_env = build_alfworld_envs(
+        alf_config_path=os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml'),
+        seed=cfg.env.seed,
+        env_num=1,
+        group_n=1,
+        resources_per_worker={"num_cpus": 0.1, "num_gpus": 0},
+        is_train=True,
+    )
+
+    manager = AlfWorldEnvironmentManagerOptions(mock_env, partial(alfworld_projection_options), cfg)
+    reset_obs, reset_infos = manager.reset(kwargs={})
+    assert reset_obs["text"][0], "Text observation should not be empty."
+
+    text_action = "<switch>SWITCH</switch> <subgoal>find statue</subgoal> <action>go to shelf 1</action>"
+    next_obs, rewards, dones, infos = manager.step([text_action])
+    assert int(infos[0]["is_action_valid"]) == 1
+    assert rewards.shape == (1,) and dones.shape == (1,)
+    history_ctx, history_len, subgoals, switches = manager.memory.fetch_options(1)
+    print("History Context:", history_ctx)
+    print("History Length:", history_len)
+    print("Subgoals:", subgoals)
+    print("Switches:", switches)
+    print("AlfWorldEnvironmentManagerOptions smoke test passed.")
+    # next step
+    text_action = "<switch>KEEP</switch> <subgoal>find statue</subgoal> <action>go to shelf 2</action>"
+    next_obs, rewards, dones, infos = manager.step([text_action])
+    assert int(infos[0]["is_action_valid"]) == 1
+    assert rewards.shape == (1,) and dones.shape == (1,)
+    history_ctx, history_len, subgoals, switches = manager.memory.fetch_options(1)
+    print("History Context:", history_ctx)
+    print("History Length:", history_len)
+    print("Subgoals:", subgoals)
+    print("Switches:", switches)
+    print("AlfWorldEnvironmentManagerOptions second step passed.")
+
+    # next step
+    text_action = "<switch>SWITCH</switch> <subgoal>pick up statues</subgoal> <action>take statue 2 from shelf 2</action>"
+    next_obs, rewards, dones, infos = manager.step([text_action])

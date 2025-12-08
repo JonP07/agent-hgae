@@ -1,3 +1,15 @@
+__pycache__/
+*.pt
+*.pth
+*.ckpt
+*.log
+*.tmp
+.env
+.venv
+data/
+outputs/
+wandb/
+
 
 **/*.pt
 **/checkpoints

@@ -13,5 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .projection import alfworld_projection
+from .projection import alfworld_projection, alfworld_projection_options
 from .envs import build_alfworld_envs

@@ -1,3 +1,11 @@
+#!/bin/bash -l
+#SBATCH --time=24:00:00
+#SBATCH --ntasks=1
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=peng0504@umn.edu
+#SBATCH -p mhong
+#SBATCH --gres=gpu:a100:4
+
 set -x
 ENGINE=${1:-vllm}
 export VLLM_ATTENTION_BACKEND=XFORMERS
@@ -64,7 +72,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_agent_alfworld' \
     trainer.experiment_name='ppo_qwen2.5_1.5b' \
-    trainer.n_gpus_per_node=2 \
+    trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
     trainer.test_freq=5 \
