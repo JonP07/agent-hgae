@@ -9,6 +9,8 @@
 set -x
 ENGINE=${1:-vllm}
 export VLLM_ATTENTION_BACKEND=XFORMERS
+
+wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
 export WANDB_ENTITY=mhong-university-of-minnesota
 
 num_cpus_per_env_worker=0.1 # The CPU resource allocated for each environment worker. If you want to use less CPU resources, you can decrease this value.
