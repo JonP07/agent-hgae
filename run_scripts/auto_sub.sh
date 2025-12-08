@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 source /code/hongpaul-sandbox/options/miniconda3/bin/activate /code/hongpaul-sandbox/options/miniconda3/envs/options
 
 wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
@@ -17,7 +19,7 @@ python3 -m examples.data_preprocess.prepare \
     --mode 'text' \
     --train_data_size $train_data_size \
     --val_data_size $val_data_size
-
+    
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=gae \
     data.train_files=$HOME/data/verl-agent/text/train.parquet \
