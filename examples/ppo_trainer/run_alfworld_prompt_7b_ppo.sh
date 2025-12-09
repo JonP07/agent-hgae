@@ -68,14 +68,14 @@ python3 -m verl.trainer.main_ppo \
     critic.model.fsdp_config.param_offload=False \
     critic.model.fsdp_config.optimizer_offload=False \
     algorithm.use_kl_in_reward=False \
-    env.env_name=alfworld/AlfredTWEnv \
+    env.env_name=alfworld/AlfredTWEnvOptions \
     env.seed=0 \
     env.max_steps=50 \
     env.resources_per_worker.num_cpus=$num_cpus_per_env_worker \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_agent_alfworld' \
-    trainer.experiment_name='ppo_qwen2.5_7b' \
+    trainer.experiment_name='ppo_qwen2.5_7b_prompt' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
