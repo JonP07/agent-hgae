@@ -41,7 +41,7 @@ Your current observation is: {current_observation}
 Your admissible actions of the current situation are: [{admissible_actions}].
 
 Now it's your turn to take an action.
-You should choose an admissible action for current step and present it within <action> </action> tags. Do NOT output any other text.
+You should choose an admissible action for current step and present it within <action> </action> tags. Do NOT output any other text. You MUST enclose the action within the <action> </action> tags.
 """
 
 ALFWORLD_TEMPLATE_NOTHINK = """
@@ -51,7 +51,7 @@ You are now at step {current_step} and your current observation is: {current_obs
 Your admissible actions of the current situation are: [{admissible_actions}].
 
 Now it's your turn to take an action.
-You should choose an admissible action for current step and present it within <action> </action> tags. Do NOT output any other text.
+You should choose an admissible action for current step and present it within <action> </action> tags. Do NOT output any other text. You MUST enclose the action within the <action> </action> tags.
 """
 
 ALFWORLD_TEMPLATE_OPTIONS_NO_HIS = """

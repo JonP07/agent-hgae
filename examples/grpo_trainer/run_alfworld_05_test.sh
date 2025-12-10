@@ -50,7 +50,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_invalid_action_penalty=True \
     actor_rollout_ref.actor.invalid_action_penalty_coef=0.1 \
     algorithm.use_kl_in_reward=False \
-    env.env_name=alfworld/AlfredTWEnv \
+    env.env_name=alfworld/AlfredTWEnvNothink \
     env.seed=0 \
     env.max_steps=50 \
     env.rollout.n=$group_size \
@@ -58,7 +58,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_agent_alfworld' \
-    trainer.experiment_name='grpo_qwen2.5_0.5b' \
+    trainer.experiment_name='grpo_qwen2.5_0.5b_nothink_test' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \

@@ -857,6 +857,18 @@ def make_envs(config):
             alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
         elif config.env.env_name == 'alfworld/AlfredTWEnv':
             alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
+        elif config.env.env_name == 'alfworld/AlfredTWEnvNothink':
+            alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
+            env_kwargs = {
+            'eval_dataset': config.env.alfworld.eval_dataset, # 'eval_in_distribution' or 'eval_out_of_distribution'
+        }
+            _envs = build_alfworld_envs(alf_config_path, config.env.seed, config.data.train_batch_size, group_n, is_train=True, env_kwargs=env_kwargs, resources_per_worker=resources_per_worker)
+            _val_envs = build_alfworld_envs(alf_config_path, config.env.seed + 1000, config.data.val_batch_size, 1, is_train=False, env_kwargs=env_kwargs, resources_per_worker=resources_per_worker)
+            projection_f = partial(alfworld_projection)
+            envs = AlfWorldEnvironmentManagerNothink(_envs, projection_f, config)
+            val_envs = AlfWorldEnvironmentManagerNothink(_val_envs, projection_f, config)
+            return envs, val_envs
+        
         elif config.env.env_name == 'alfworld/AlfredTWEnvOptions':
             alf_config_path = os.path.join(os.path.dirname(__file__), 'env_package/alfworld/configs/config_tw.yaml')
             from agent_system.environments.env_package.alfworld import alfworld_projection_options
