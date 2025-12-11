@@ -8,7 +8,7 @@
 
 set -x
 ENGINE=${1:-vllm}
-export CUDA_VISIBLE_DEVICES=4,5
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 export VLLM_ATTENTION_BACKEND=XFORMERS
 export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
 export RAY_worker_register_timeout_seconds=600
@@ -75,7 +75,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_agent_alfworld' \
     trainer.experiment_name='grpo_qwen2.5_1.5b_prompt' \
-    trainer.n_gpus_per_node=2 \
+    trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
     trainer.test_freq=5 \
