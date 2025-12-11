@@ -11,6 +11,8 @@ ENGINE=${1:-vllm}
 export CUDA_VISIBLE_DEVICES=2,3
 export VLLM_ATTENTION_BACKEND=XFORMERS
 export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
+export RAY_worker_register_timeout_seconds=600
+
 echo "ALFWORLD_DATA set to $ALFWORLD_DATA"
 
 wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
