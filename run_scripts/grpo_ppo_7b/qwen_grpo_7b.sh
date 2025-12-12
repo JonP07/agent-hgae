@@ -1,6 +1,6 @@
 source /code/hongpaul-sandbox/options/miniconda3/bin/activate /code/hongpaul-sandbox/options/miniconda3/envs/options
 
-cd /code/hongpaul-sandbox/temp/hierarchy_agent/hierarchy-agent/
+cd /code/hongpaul-sandbox/temp/hierarchy_agent/
 
 wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
 

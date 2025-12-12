@@ -1,6 +1,6 @@
 set -euo pipefail
 
-cd /code/hongpaul-sandbox/temp/hierarchy_agent/hierarchy-agent/
+cd /code/hongpaul-sandbox/temp/hierarchy_agent/
 
 SESSION="alfworld_ppo_grpo_7b"
 ENGINE=vllm
