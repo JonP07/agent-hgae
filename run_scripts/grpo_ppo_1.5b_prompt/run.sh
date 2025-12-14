@@ -2,7 +2,7 @@ set -euo pipefail
 
 cd /code/hongpaul-sandbox/temp/hierarchy_agent/
 
-SESSION="alfworld_ppo_grpo_1.5b_prompt"
+SESSION="alfworld_ppo_grpo_1_5b_prompt"
 ENGINE=vllm
 SCRIPT="run_scripts/grpo_ppo_1.5b_prompt/qwen_ppo_1.5b_prompt.sh"
 SCRIPT2="run_scripts/grpo_ppo_1.5b_prompt/qwen_grpo_1.5b_prompt.sh"
