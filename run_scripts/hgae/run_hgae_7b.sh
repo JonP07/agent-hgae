@@ -10,9 +10,9 @@ SEED=${2:-0}
 shift 2 || true
 
 mkdir -p logs
-LOGFILE="logs/hgae_qwen2.5_7b_seed${SEED}.txt"
-export PYTHONUNBUFFERED=1
-exec > "$LOGFILE" 2>&1
+# LOGFILE="logs/hgae_qwen2.5_7b_seed${SEED}.txt"
+# export PYTHONUNBUFFERED=1
+# exec > "$LOGFILE" 2>&1
 
 export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
 echo "ALFWORLD_DATA set to $ALFWORLD_DATA"
