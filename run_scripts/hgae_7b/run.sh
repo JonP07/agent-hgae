@@ -1,6 +1,6 @@
 set -euo pipefail
 
-cd /code/hongpaul-sandbox/temp/hierarchy_agent/
+cd /code/hongpaul-sandbox/temp/agent-hgae/
 
 SESSION="alfworld_hgae_7b_seed1"
 ENGINE=vllm
