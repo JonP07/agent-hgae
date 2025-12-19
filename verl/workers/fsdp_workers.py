@@ -870,7 +870,12 @@ class CriticWorker(Worker):
         from transformers import AutoConfig, AutoModelForTokenClassification
 
         critic_model_config = AutoConfig.from_pretrained(local_path, attn_implementation="flash_attention_2", trust_remote_code=config.model.get("trust_remote_code", False))
-        critic_model_config.num_labels = 1
+        if self.config.use_two_heads_critic:
+            critic_model_config.num_labels = 2
+        else:
+            critic_model_config.num_labels = 1
+        # for debugging add breakpoint
+        # import pdb; pdb.set_trace()
         # patch for kimi-vl
         if getattr(critic_model_config, "model_type", None) == "kimi_vl":
             critic_model_config.text_config.topk_method = "greedy"
@@ -1051,7 +1056,10 @@ class CriticWorker(Worker):
         with self.ulysses_sharding_manager:
             data = self.ulysses_sharding_manager.preprocess_data(data=data)
             values = self.critic.compute_values(data=data)
-            output = DataProto.from_dict(tensors={"values": values})
+            if self.config.use_two_heads_critic:
+                output = DataProto.from_dict(tensors={"value_high": values[0], "value_low": values[1]})
+            else:
+                output = DataProto.from_dict(tensors={"values": values})
             output = self.ulysses_sharding_manager.postprocess_data(data=output)
 
         output = output.to("cpu")

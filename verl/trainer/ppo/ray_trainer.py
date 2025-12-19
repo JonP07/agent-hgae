@@ -47,6 +47,7 @@ from verl.trainer.ppo import core_algos
 from verl.trainer.ppo.core_algos import agg_loss
 from verl.trainer.ppo.metric_utils import (
     compute_data_metrics,
+    compute_hgae_metrics,
     compute_throughout_metrics,
     compute_timing_metrics,
     process_validation_metrics,
@@ -61,7 +62,8 @@ from verl.utils.torch_functional import masked_mean
 from verl.utils.tracking import ValidationGenerationsLogger
 from verl.workers.rollout.async_server import AsyncLLMServerManager
 from gigpo import core_gigpo
-
+from hier_gae.hier_mask import make_hgae_masks_and_switch
+from hier_gae.core_hgae import HGAEConfig, compute_hgae_advantage, compute_value_mask
 from agent_system.multi_turn_rollout import TrajectoryCollector, adjust_batch
 
 WorkerType = Type[Worker]
@@ -443,7 +445,10 @@ class RayPPOTrainer:
         if config.algorithm.use_kl_in_reward:
             self.kl_ctrl_in_reward = core_algos.get_kl_controller(config.algorithm.kl_ctrl)
 
-        if self.config.algorithm.adv_estimator == AdvantageEstimator.GAE:
+        if self.config.algorithm.adv_estimator in [
+            AdvantageEstimator.GAE, 
+            AdvantageEstimator.HGAE
+        ]:
             self.use_critic = True
         elif self.config.algorithm.adv_estimator in [
             AdvantageEstimator.GRPO,
@@ -1086,7 +1091,16 @@ class RayPPOTrainer:
                                                                 envs=self.envs,
                                                                 is_train=True,
                                                                 )
-                        # # inspect generated content for debugging
+                        # inspect batch for debugging
+                        # print(gen_batch_output.non_tensor_batch.keys())
+                        # print(gen_batch_output.non_tensor_batch.get('turn_idx'))
+                        # print(gen_batch_output.non_tensor_batch.get('dones'))
+                        # print(gen_batch_output.non_tensor_batch.get('rewards'))
+                        # print(gen_batch_output.non_tensor_batch.get('traj_uid'))
+                        # print(len(gen_batch_output.non_tensor_batch.get('turn_idx')))
+                        # print(len(gen_batch_output.non_tensor_batch.get('dones'))) # batch_size * n_turns
+                        
+                        # inspect generated content for debugging
                         # for i in range(len(gen_batch_output.batch['input_ids'])):
                         #     input_ids = gen_batch_output.batch['input_ids'][i]
                         #     response_ids = gen_batch_output.batch['responses'][i]
@@ -1129,12 +1143,15 @@ class RayPPOTrainer:
                     batch = adjust_batch(self.config, batch)
 
                     batch.batch["response_mask"] = compute_response_mask(batch)
+                    
+
                     # balance the number of valid tokens on each dp rank.
                     # Note that this breaks the order of data inside the batch.
                     # Please take care when you implement group based adv computation such as GRPO and rloo
                     if self.config.trainer.balance_batch:
                         self._balance_batch(batch, metrics=metrics)
-
+                    # for debugging check batch balance
+                    # print(self.config.trainer.balance_batch)
                     # compute global_valid tokens
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
@@ -1148,6 +1165,8 @@ class RayPPOTrainer:
                             future_reward = compute_reward_async.remote(batch, self.config, self.tokenizer)
                         else:
                             reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
+                    # for debugging, print reward tensors
+                    # print(f"Reward tensor:", reward_tensor)
 
                     # recompute old_log_probs
                     with _timer("old_log_prob", timing_raw):
@@ -1229,22 +1248,63 @@ class RayPPOTrainer:
 
                         norm_adv_by_std_in_grpo = self.config.algorithm.get("norm_adv_by_std_in_grpo", True)  # GRPO adv normalization factor
 
-                        batch = compute_advantage(
-                            batch,
-                            adv_estimator=self.config.algorithm.adv_estimator,
-                            gamma=self.config.algorithm.gamma,
-                            lam=self.config.algorithm.lam,
-                            num_repeat=self.config.actor_rollout_ref.rollout.n,
-                            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-                            multi_turn=self.config.actor_rollout_ref.rollout.multi_turn.enable,
-                            use_pf_ppo=self.config.algorithm.use_pf_ppo,
-                            pf_ppo_reweight_method=self.config.algorithm.pf_ppo.reweight_method,
-                            pf_ppo_weight_pow=self.config.algorithm.pf_ppo.weight_pow,
-                            step_advantage_w=self.config.algorithm.gigpo.step_advantage_w,
-                            gigpo_mode=self.config.algorithm.gigpo.mode,
-                            gigpo_enable_similarity= self.config.algorithm.gigpo.enable_similarity,
-                            gigpo_similarity_thresh=self.config.algorithm.gigpo.similarity_thresh,
-                        )
+                        if self.config.algorithm.adv_estimator == AdvantageEstimator.HGAE:
+                            hgae_cfg = HGAEConfig(
+                                gamma=self.config.algorithm.gamma,
+                                lam_turn=self.config.algorithm.lam,
+                                lam_seg=self.config.algorithm.hgae.lam_seg,
+                                value_key_low="value_low",
+                                value_key_high="value_high",
+                                assign_high_to_switch=True,
+                                assign_high_to_subgoal=True,
+                            )
+                            # import pdb; pdb.set_trace()
+                            action_mask, subgoal_mask, switch_mask, is_new_subgoal = make_hgae_masks_and_switch(
+                                batch,
+                                include_tags_mask=hgae_cfg.include_tags_mask,
+                                tokenizer=self.tokenizer,
+                            )
+                            batch.non_tensor_batch['switch'] = is_new_subgoal
+                            # build the value masking, for now we want one (or two at boundary) values per turn
+                            batch.batch["value_mask_high"], batch.batch["value_mask_low"] = compute_value_mask(batch, self.tokenizer)
+                            # pdb.set_trace()
+                            batch = compute_hgae_advantage(
+                                batch,
+                                cfg=hgae_cfg,
+                                action_mask=action_mask,
+                                subgoal_mask=subgoal_mask,
+                                switch_mask=switch_mask)
+                            # building loss mask for HGAE actor update
+                            resp_train_mask = (batch.batch["hgae_lo_mask"] | batch.batch["hgae_hi_mask"])  # (N, L) bool
+                            resp_train_mask = resp_train_mask & batch.batch["response_mask"].bool()
+                            attn = batch.batch["attention_mask"]
+                            L = batch.batch["responses"].size(1)
+                            loss_mask = torch.zeros_like(attn, dtype=torch.bool)
+                            loss_mask[:, -L:] = resp_train_mask
+                            batch.batch["loss_mask"] = loss_mask.to(attn.dtype)  # keep dtype consistent with other masks
+                            # enable multi_turn so that actor update uses hgae masks
+                            self.config.actor_rollout_ref.rollout.multi_turn.enable = True
+
+                            # add breakpoint for debugging
+                            # import pdb; pdb.set_trace()
+                        else:
+                            batch = compute_advantage(
+                                batch,
+                                adv_estimator=self.config.algorithm.adv_estimator,
+                                gamma=self.config.algorithm.gamma,
+                                lam=self.config.algorithm.lam,
+                                num_repeat=self.config.actor_rollout_ref.rollout.n,
+                                norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                                multi_turn=self.config.actor_rollout_ref.rollout.multi_turn.enable,
+                                use_pf_ppo=self.config.algorithm.use_pf_ppo,
+                                pf_ppo_reweight_method=self.config.algorithm.pf_ppo.reweight_method,
+                                pf_ppo_weight_pow=self.config.algorithm.pf_ppo.weight_pow,
+                                step_advantage_w=self.config.algorithm.gigpo.step_advantage_w,
+                                gigpo_mode=self.config.algorithm.gigpo.mode,
+                                gigpo_enable_similarity= self.config.algorithm.gigpo.enable_similarity,
+                                gigpo_similarity_thresh=self.config.algorithm.gigpo.similarity_thresh,
+                            )
+
 
                     # update critic
                     if self.use_critic:
@@ -1298,7 +1358,10 @@ class RayPPOTrainer:
                     }
                 )
                 # collect metrics
-                metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
+                if self.config.algorithm.adv_estimator == AdvantageEstimator.HGAE:
+                    metrics.update(compute_hgae_metrics(batch=batch))
+                else:
+                    metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 # TODO: implement actual tflpo and theoretical tflpo
                 n_gpus = self.resource_pool_manager.get_n_gpus()

@@ -151,6 +151,7 @@ actor_rollout_ref:
 
 critic:
   rollout_n: ${actor_rollout_ref.rollout.n}
+  use_two_heads_critic: False
   strategy: fsdp # [fsdp, fsdp2]
   optim:
     lr: 1e-5
@@ -242,6 +243,8 @@ algorithm:
     kl_coef: 0.001
     horizon: 10000
     target_kl: 0.1
+  hgae:
+    lam_seg: 0.95
   use_pf_ppo: False
   pf_ppo:
     reweight_method: pow  # ["pow", "max_min", "max_random"]

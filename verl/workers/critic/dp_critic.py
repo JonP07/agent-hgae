@@ -103,7 +103,9 @@ class DataParallelPPOCritic(BasePPOCritic):
 
                 # pad it back
                 values = pad_input(values_rmpad, indices=indices, batch=batch, seqlen=seqlen).squeeze(-1)
-                values = values[:, -response_length - 1 : -1]
+                # for debugging add breakpoint
+                # import pdb; pdb.set_trace()
+                # values = values[:, -response_length - 1 : -1]
             else:
                 output = self.critic_module(
                     input_ids=input_ids,
@@ -113,8 +115,18 @@ class DataParallelPPOCritic(BasePPOCritic):
                     use_cache=False,
                 )  # prevent model thinks we are generating
                 values = output.logits
+            # for debugging add breakpoint
+            # import pdb; pdb.set_trace()
+            # values shape (batch, seq_len) if one critic, (batch, seq_len, 2) if two critics
+            if values.dim() == 2:
                 values = values[:, -response_length - 1 : -1].squeeze(-1)
-            return values
+                return values
+            elif values.dim() == 3:
+                values_low = values[:, -response_length - 1 : -1, 0]
+                values_high = values[:, -response_length - 1 : -1, 1]
+                return values_low, values_high
+            else:
+                raise ValueError(f"Unexpected values size: {values.size()}")
 
     def _optimizer_step(self):
         assert self.config.grad_clip is not None
@@ -143,6 +155,8 @@ class DataParallelPPOCritic(BasePPOCritic):
         use_dynamic_bsz = data.meta_info["use_dynamic_bsz"]
         has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
 
+        use_two_value_heads = bool(self.config.get("use_two_heads_critic", False))
+
         if has_multi_modal_inputs:
             num_micro_batches = data.batch.batch_size[0] // micro_batch_size
             non_tensor_select_keys = ["multi_modal_inputs"]
@@ -155,14 +169,25 @@ class DataParallelPPOCritic(BasePPOCritic):
             micro_batches = batch.split(micro_batch_size)
 
         values_lst = []
+        values_high_lst = [] if use_two_value_heads else None
         for micro_batch in micro_batches:
             if isinstance(micro_batch, DataProto):
                 micro_batch = {**micro_batch.batch, **micro_batch.non_tensor_batch}
 
             with torch.no_grad():
                 values = self._forward_micro_batch(micro_batch)
-            values_lst.append(values)
+            if use_two_value_heads:
+                values_low, values_high = values
+                values_lst.append(values_low)
+                if values_high_lst is None:
+                    raise RuntimeError("values_high_lst is None but use_two_value_heads is True")
+                values_high_lst.append(values_high)
+            else:
+                values_lst.append(values)
+        # for debugging add breakpoint
+        # import pdb; pdb.set_trace()
         values = torch.concat(values_lst, dim=0)
+        values_high = torch.concat(values_high_lst, dim=0) if use_two_value_heads else None
         responses = data.batch["responses"]
         attention_mask = data.batch["attention_mask"]
         response_length = responses.size(1)
@@ -172,7 +197,12 @@ class DataParallelPPOCritic(BasePPOCritic):
             assert len(indices) == values.size(0), f"{len(indices)} vs. {values.size()}"
             revert_indices = torch.tensor(get_reverse_idx(indices), dtype=torch.long)
             values = values[revert_indices]
+            if use_two_value_heads:
+                values_high = values_high[revert_indices]
         values = values * attention_mask[:, -response_length - 1 : -1]
+        if use_two_value_heads:
+            values_high = values_high * attention_mask[:, -response_length - 1 : -1]
+            return values, values_high
         return values
 
     @GPUMemoryLogger(role="dp critic", logger=logger)
@@ -180,8 +210,23 @@ class DataParallelPPOCritic(BasePPOCritic):
         # make sure we are in training mode
         self.critic_module.train()
         metrics = {}
-
-        select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "values", "returns"]
+        use_two_value_heads = bool(self.config.get("use_two_heads_critic", False))
+        high_value_coef = self.config.get("high_value_coef", 1.0) if use_two_value_heads else 0.0
+        if use_two_value_heads:
+            select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "value_low", "value_high", "returns_low", "returns_high"]
+        else:
+            select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "values", "returns"]
+        avail_keys = set(data.batch.keys()).union(set(data.non_tensor_batch.keys())) if isinstance(data, DataProto) else set()
+        if use_two_value_heads and "value_high" in avail_keys:
+            select_keys.append("value_high")
+        if "returns_high" in avail_keys:
+            select_keys.append("returns_high")
+        if "returns_low" in avail_keys:
+            select_keys.append("returns_low")
+        if "value_mask_low" in avail_keys:
+            select_keys.append("value_mask_low")
+        if "value_mask_high" in avail_keys:
+            select_keys.append("value_mask_high")
         batch = data.select(batch_keys=select_keys).batch
         has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
 
@@ -218,42 +263,127 @@ class DataParallelPPOCritic(BasePPOCritic):
                         data = data.to(get_torch_device().current_device())  # critic device is cpu when using offload
                     responses = data["responses"]
                     attention_mask = data["attention_mask"]
-                    values = data["values"]
-                    returns = data["returns"]
+                    if not use_two_value_heads:
+                        values = data["values"]
+                        returns = data["returns"]
                     response_length = responses.size(1)
 
                     response_mask = attention_mask[:, -response_length - 1 : -1]
 
                     vpreds = self._forward_micro_batch(data)
+                    # import pdb; pdb.set_trace()
+
+                    if use_two_value_heads:
+                        vpred_low, vpred_high = vpreds
+                    else:
+                        vpred_low = vpreds
+                        vpred_high = None
 
                     # assert not torch.any(torch.isnan(vpreds)).item()
+                    mask_low = response_mask
+                    if "value_mask_low" in data:
+                        mask_low = (data['value_mask_low'].bool()) & (response_mask.bool())
 
-                    vf_loss, vf_clipfrac = core_algos.compute_value_loss(
-                        vpreds=vpreds,
-                        values=values,
-                        returns=returns,
-                        response_mask=response_mask,
+                    mask_high = None
+                    has_high_targets = ("returns_high" in data) and ("value_mask_high" in data)
+                    if has_high_targets:
+                        mask_high = (data['value_mask_high'].bool()) & (response_mask.bool())
+                    if use_two_value_heads:
+                        values_low_old = data["value_low"]
+                        returns_low = data["returns_low"]
+                    else:
+                        values_low_old = values
+                        returns_low = returns
+
+                    if mask_low.any():
+                        vf_loss_low, vf_clipfrac_low = core_algos.compute_value_loss(
+                            vpreds=vpred_low,
+                            values=values_low_old,
+                            returns=returns_low,
+                            response_mask=mask_low,
+                            cliprange_value=self.config.cliprange_value,
+                            loss_agg_mode=self.config.loss_agg_mode,
+                        )
+                    else:
+                        vf_loss_low = torch.tensor(0.0, device=vpred_low.device)
+                        vf_clipfrac_low = torch.tensor(0.0, device=vpred_low.device)
+                    total_vf = vf_loss_low
+                    # pdb.set_trace()
+                    vf_high = None
+                    vf_clipfrac_high = None
+                    if has_high_targets and mask_high is not None and mask_high.any():
+                        returns_high = data["returns_high"]
+                        if use_two_value_heads and ("value_high" in data):
+                            values_high_old = data["value_high"]
+                        else:
+                            values_high_old = data.get("value_high", values_low_old)
+                        vpred_for_high = vpred_high if (use_two_value_heads and vpred_high is not None) else vpred_low
+                        
+                        vf_high, vf_clipfrac_high = core_algos.compute_value_loss(
+                        vpreds=vpred_for_high,
+                        values=values_high_old,
+                        returns=returns_high,
+                        response_mask=mask_high,
                         cliprange_value=self.config.cliprange_value,
                         loss_agg_mode=self.config.loss_agg_mode,
                     )
+                        total_vf = total_vf + high_value_coef * vf_high
+                    # pdb.set_trace()
+                    # vf_loss, vf_clipfrac = core_algos.compute_value_loss(
+                    #     vpreds=vpreds,
+                    #     values=values,
+                    #     returns=returns,
+                    #     response_mask=response_mask,
+                    #     cliprange_value=self.config.cliprange_value,
+                    #     loss_agg_mode=self.config.loss_agg_mode,
+                    # )
                     if self.config.use_dynamic_bsz:
                         # relative to the dynamic bsz
-                        loss = vf_loss * (len(data) / self.config.ppo_mini_batch_size)
+                        loss = total_vf * (len(data) / self.config.ppo_mini_batch_size)
                     else:
-                        loss = vf_loss / self.gradient_accumulation
-
+                        loss = total_vf / self.gradient_accumulation
+                    # pdb.set_trace()
                     loss.backward()
 
-                    data = {
-                        "critic/vf_loss": vf_loss.detach().item(),
-                        "critic/vf_clipfrac": vf_clipfrac.detach().item(),
-                        "critic/vpred_mean": masked_mean(vpreds, response_mask).detach().item(),
+                    log = {
+                    "critic/vf_loss": total_vf.detach().item(),
+                    "critic/vf_loss_low": vf_loss_low.detach().item(),
+                    "critic/vf_clipfrac_low": vf_clipfrac_low.detach().item(),
+                    "critic/vpred_mean_low": (masked_mean(vpred_low, mask_low).detach().item() if mask_low.any() else 0.0),
+                    "critic/mask_tokens_low": float(mask_low.sum().detach().item()),
+                    "critic/use_two_heads_critic": float(use_two_value_heads),
                     }
 
-                    append_to_dict(metrics, data)
+                    if vf_high is not None:
+                        vpred_for_high = vpred_high if (use_two_value_heads and vpred_high is not None) else vpred_low
+                        log.update(
+                        {
+                            "critic/vf_loss_high": vf_high.detach().item(),
+                            "critic/vf_clipfrac_high": vf_clipfrac_high.detach().item() if vf_clipfrac_high is not None else 0.0,
+                            "critic/vpred_mean_high": (masked_mean(vpred_for_high, mask_high).detach().item() if mask_high.any() else 0.0),
+                            "critic/mask_tokens_high": float(mask_high.sum().detach().item()),
+                            "critic/high_vf_coef": high_value_coef,
+                        }
+                        )
+                    else:
+                        log.update(
+                            {
+                                "critic/vf_loss_high": 0.0,
+                                "critic/vf_clipfrac_high": 0.0,
+                                "critic/vpred_mean_high": 0.0,
+                                "critic/mask_tokens_high": 0.0,
+                                "critic/high_vf_coef": high_value_coef,
+                            }
+                        )
+
+                    append_to_dict(metrics, log)
 
                 grad_norm = self._optimizer_step()
-                data = {"critic/grad_norm": grad_norm.detach().item()}
-                append_to_dict(metrics, data)
+                append_to_dict(
+                    metrics,
+                    {
+                        "critic/grad_norm": grad_norm.detach().item(),
+                    },
+                )
         self.critic_optimizer.zero_grad()
         return metrics

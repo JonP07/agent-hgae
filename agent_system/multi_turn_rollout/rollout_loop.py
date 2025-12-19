@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import sys
+sys.path.append('/projects/standard/mhong/peng0504/hierarchy-agent/verl-agent')
 import torch
 import numpy as np
 from verl import DataProto
@@ -378,6 +379,8 @@ class TrajectoryCollector:
             assert len(rewards) == batch_size, f"env should return rewards for all environments, got {len(rewards)} rewards for {batch_size} environments"
             batch.non_tensor_batch['rewards'] = torch_to_numpy(rewards, is_object=True)
             batch.non_tensor_batch['active_masks'] = torch_to_numpy(active_masks, is_object=True)
+            batch.non_tensor_batch['dones'] = torch_to_numpy(dones, is_object=True)
+            batch.non_tensor_batch['turn_idx'] = np.full(batch_size, _step, dtype=np.int32)
             
             # Update episode lengths for active environments
             batch_list: list[dict] = to_list_of_dict(batch)

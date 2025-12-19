@@ -125,7 +125,6 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
         valid_values = torch.masked_select(values, response_mask)
         return_diff_var = torch.var(valid_returns - valid_values)
         return_var = torch.var(valid_returns)
-
     metrics = {
         # score
         "critic/score/mean": torch.mean(sequence_score).detach().item(),
@@ -184,6 +183,124 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> Dict[str,
             batch.non_tensor_batch["tool_callings"][unique_idx].max().item(),
         "episode/tool_call_count/min":
             batch.non_tensor_batch["tool_callings"][unique_idx].min().item(),
+        **({f"episode/{k}": v[0].item() for k, v in batch.non_tensor_batch.items() if "success_rate" in k}),
+    }
+    return metrics
+
+def compute_hgae_metrics(batch: DataProto) -> Dict[str, Any]:
+    """
+    Computes various metrics from a batch of data for HGAE PPO training.
+
+    This function calculates metrics related to scores, rewards, advantages, returns, values,
+    and sequence lengths from a batch of data. It provides statistical information (mean, max, min)
+    for each metric category.
+
+    Args:
+        batch: A DataProto object containing batch data with token-level scores, rewards, advantages, etc.
+    Returns:
+        A dictionary of metrics including:
+            - critic/score/mean, max, min: Statistics about sequence scores
+            - critic/rewards/mean, max, min: Statistics about sequence rewards
+            - critic/advantages/mean, max, min: Statistics about advantages
+            - critic/returns/mean, max, min: Statistics about returns
+            - critic/values/mean, max, min: Statistics about critic values
+            - critic/vf_explained_var: Explained variance of the value function
+            - response_length/mean, max, min, clip_ratio: Statistics about response lengths
+            - prompt_length/mean, max, min, clip_ratio: Statistics about prompt lengths
+    """
+    sequence_score = batch.batch["token_level_scores"].sum(-1)
+    sequence_reward = batch.batch["token_level_rewards"].sum(-1)
+
+    advantages_low = batch.batch["advantages_low"]
+    returns_low = batch.batch["returns_low"]
+    values_low = batch.batch["value_low"]
+    advantages_high = batch.batch["advantages_high"]
+    returns_high = batch.batch["returns_high"]
+    values_high = batch.batch["value_high"]
+    max_response_length = batch.batch["responses"].shape[-1]
+    prompt_mask = batch.batch["attention_mask"][:, :-max_response_length].bool()
+    response_mask = batch.batch["attention_mask"][:, -max_response_length:].bool()
+    max_prompt_length = prompt_mask.size(-1)
+    
+    response_info = _compute_response_info(batch)
+    prompt_length = response_info["prompt_length"]
+    response_length = response_info["response_length"]
+    valid_adv_low = torch.masked_select(advantages_low, response_mask)
+    valid_returns_low = torch.masked_select(returns_low, response_mask)
+    valid_values_low = torch.masked_select(values_low, response_mask)
+    return_diff_var_low = torch.var(valid_returns_low - valid_values_low)
+    return_var_low = torch.var(valid_returns_low)
+    valid_adv_high = torch.masked_select(advantages_high, response_mask)
+    valid_returns_high = torch.masked_select(returns_high, response_mask)
+    valid_values_high = torch.masked_select(values_high, response_mask)
+    return_diff_var_high = torch.var(valid_returns_high - valid_values_high)
+    return_var_high = torch.var(valid_returns_high)
+    metrics = {
+        # score
+        "critic/score/mean": torch.mean(sequence_score).detach().item(),
+        "critic/score/max": torch.max(sequence_score).detach().item(),
+        "critic/score/min": torch.min(sequence_score).detach().item(),
+        # reward
+        "critic/rewards/mean": torch.mean(sequence_reward).detach().item(),
+        "critic/rewards/max": torch.max(sequence_reward).detach().item(),
+        "critic/rewards/min": torch.min(sequence_reward).detach().item(),
+        # adv low
+        "critic/advantages_low/mean": torch.mean(valid_adv_low).detach().item(),
+        "critic/advantages_low/max": torch.max(valid_adv_low).detach().item(),
+        "critic/advantages_low/min": torch.min(valid_adv_low).detach().item(),
+        # returns low
+        "critic/returns_low/mean": torch.mean(valid_returns_low).detach().item(),
+        "critic/returns_low/max": torch.max(valid_returns_low).detach().item(),
+        "critic/returns_low/min": torch.min(valid_returns_low).detach().item(),
+        # values low
+        "critic/values_low/mean": torch.mean(valid_values_low).detach().item(),
+        "critic/values_low/max": torch.max(valid_values_low).detach().item(),
+        "critic/values_low/min": torch.min(valid_values_low).detach().item(),
+        # vf explained var low
+        "critic/vf_explained_var_low": (1.0 - return_diff_var_low / (return_var_low + 1e-5)).detach().item(),
+        # adv high
+        "critic/advantages_high/mean": torch.mean(valid_adv_high).detach().item(),
+        "critic/advantages_high/max": torch.max(valid_adv_high).detach().item(),
+        "critic/advantages_high/min": torch.min(valid_adv_high).detach().item(),
+        # returns high
+        "critic/returns_high/mean": torch.mean(valid_returns_high).detach().item(),
+        "critic/returns_high/max": torch.max(valid_returns_high).detach().item(),
+        "critic/returns_high/min": torch.min(valid_returns_high).detach().item(),
+        # values high
+        "critic/values_high/mean": torch.mean(valid_values_high).detach().item(),
+        "critic/values_high/max": torch.max(valid_values_high).detach().item(),
+        "critic/values_high/min": torch.min(valid_values_high).detach().item(),
+        # vf explained var high
+        "critic/vf_explained_var_high": (1.0 - return_diff_var_high / (return_var_high + 1e-5)).detach().item(),
+        # response length
+        "response_length/mean": torch.mean(response_length).detach().item(),
+        "response_length/max": torch.max(response_length).detach().item(),
+        "response_length/min": torch.min(response_length).detach().item(),
+        "response_length/clip_ratio": torch.mean(torch.eq(response_length, max_response_length).float()).detach().item(),
+        # prompt length
+        "prompt_length/mean": torch.mean(prompt_length).detach().item(),
+        "prompt_length/max": torch.max(prompt_length).detach().item(),
+        "prompt_length/min": torch.min(prompt_length).detach().item(),
+        "prompt_length/clip_ratio": torch.mean(torch.eq(prompt_length, max_prompt_length).float()).detach().item(),
+        # episode
+        "episode/reward/mean": 
+            batch.non_tensor_batch["episode_rewards"].mean().item(),
+        "episode/reward/max": 
+            batch.non_tensor_batch["episode_rewards"].max().item(),
+        "episode/reward/min": 
+            batch.non_tensor_batch["episode_rewards"].min().item(),
+        "episode/length/mean": 
+            batch.non_tensor_batch["episode_lengths"].mean().item(),
+        "episode/length/max":
+            batch.non_tensor_batch["episode_lengths"].max().item(),
+        "episode/length/min": 
+            batch.non_tensor_batch["episode_lengths"].min().item(),
+        "episode/tool_call_count/mean": 
+            batch.non_tensor_batch["tool_callings"].mean().item(),
+        "episode/tool_call_count/max":
+            batch.non_tensor_batch["tool_callings"].max().item(),
+        "episode/tool_call_count/min":
+            batch.non_tensor_batch["tool_callings"].min().item(),
         **({f"episode/{k}": v[0].item() for k, v in batch.non_tensor_batch.items() if "success_rate" in k}),
     }
     return metrics

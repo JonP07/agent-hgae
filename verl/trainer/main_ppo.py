@@ -136,6 +136,9 @@ class TaskRunner:
         if reward_manager_name == 'episode':
             from agent_system.reward_manager import EpisodeRewardManager
             reward_manager_cls = EpisodeRewardManager
+        elif reward_manager_name == 'multi_turn':
+            from agent_system.reward_manager import MultiTurnRewardManager
+            reward_manager_cls = MultiTurnRewardManager
         else:
             raise NotImplementedError
 
