@@ -75,6 +75,7 @@ python3 -m verl.trainer.main_ppo \
     critic.model.fsdp_config.optimizer_offload=False \
     critic.use_two_heads_critic=True \
     algorithm.use_kl_in_reward=False \
+    reward_model.reward_manager=multi_turn \
     env.env_name=alfworld/AlfredTWEnvOptions \
     env.seed=$SEED \
     env.max_steps=50 \
