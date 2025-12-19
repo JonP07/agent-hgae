@@ -1,21 +1,23 @@
-#!/bin/bash -l
-#SBATCH --time=24:00:00
-#SBATCH --ntasks=1
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=peng0504@umn.edu
-#SBATCH -p mhong
-#SBATCH --gres=gpu:h100:4
+source /code/hongpaul-sandbox/options/miniconda3/bin/activate /code/hongpaul-sandbox/options/miniconda3/envs/options
+
+cd /code/hongpaul-sandbox/temp/hierarchy_agent/
+
+wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
 
 set -x
 ENGINE=${1:-vllm}
-# export CUDA_VISIBLE_DEVICES=0,1,2,3
+SEED=${2:-0}
+shift 2 || true
+
+mkdir -p logs
+LOGFILE="logs/hgae_qwen2.5_1_5b_seed${SEED}.txt"
+export PYTHONUNBUFFERED=1
+exec > "$LOGFILE" 2>&1
+
+export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
+echo "ALFWORLD_DATA set to $ALFWORLD_DATA"
+
 export VLLM_ATTENTION_BACKEND=XFORMERS
-# export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
-# export RAY_worker_register_timeout_seconds=600
-
-# echo "ALFWORLD_DATA set to $ALFWORLD_DATA"
-
-# wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
 export WANDB_ENTITY=mhong-university-of-minnesota
 
 num_cpus_per_env_worker=0.1 # The CPU resource allocated for each environment worker. If you want to use less CPU resources, you can decrease this value.
@@ -54,7 +56,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=32 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
     actor_rollout_ref.rollout.name=$ENGINE \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
@@ -74,13 +76,13 @@ python3 -m verl.trainer.main_ppo \
     critic.use_two_heads_critic=True \
     algorithm.use_kl_in_reward=False \
     env.env_name=alfworld/AlfredTWEnvOptions \
-    env.seed=0 \
+    env.seed=$SEED \
     env.max_steps=50 \
     env.resources_per_worker.num_cpus=$num_cpus_per_env_worker \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_agent_alfworld' \
-    trainer.experiment_name='ppo_qwen2.5_1.5b_dev' \
+    trainer.experiment_name="hgae_qwen2.5_1.5b_seed_${SEED}" \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
