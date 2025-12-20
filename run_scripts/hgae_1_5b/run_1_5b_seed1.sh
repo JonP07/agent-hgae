@@ -14,7 +14,6 @@ tmux has-session -t $SESSION 2>/dev/null && tmux kill-session -t $SESSION
 
 # create session + first window
 tmux new-session -d -s "$SESSION" -n "HGAE_seed${SEED_A}"
-
 tmux send-keys -t "$SESSION:HGAE_seed${SEED_A}" \
   "CUDA_VISIBLE_DEVICES=${GPUS_A} bash ${SCRIPT_HGAE} ${ENGINE} ${SEED_A}" C-m
 
