@@ -8,7 +8,7 @@ SCRIPT_HGAE_3B="run_scripts/hgae_3b/run_hgae_3b.sh"
 
 # Run A
 SEED_A=1
-GPUS_A="0,1,2,3"
+GPUS_A="4,5,6,7"
 
 tmux has-session -t $SESSION 2>/dev/null && tmux  kill-session -t $SESSION
 
