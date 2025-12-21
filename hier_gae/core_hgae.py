@@ -102,12 +102,11 @@ class HGAEConfig:
     # where to read low/high values from
     value_key_low: str = "value_low"
     value_key_high: Optional[str] = "value_high"  # if None or missing, reuse low
-    # which token position to use as "turn value"
-    turn_value_pos: str = "first"  # "first" or "last"
     # assign high-level advantage to which tokens
     assign_high_to_switch: bool = False
     assign_high_to_subgoal: bool = True
     include_tags_mask: bool = True
+    norm_adv: bool = False  # whether to normalize advantages before masking
 
 
 @torch.no_grad()
@@ -217,7 +216,7 @@ def compute_hgae_advantage(
             # precompute bootstrap high value for this segment end
             if nxt_pos is not None:
                 next_boundary_i = idxs[nxt_pos]
-                boot_high = v_high[next_boundary_i]
+                boot_high = v_high[next_boundary_i].detach()
             else:
                 boot_high = torch.tensor(0.0, device=device)
 
@@ -316,6 +315,16 @@ def compute_hgae_advantage(
     # low-level advantage goes to action tokens (you control action_mask)
     lo_mask = action_mask
 
+    # optionally normalize advantages before masking
+    if cfg.norm_adv:
+        adv_low_mean = adv_low_step.mean()
+        adv_low_std = adv_low_step.std(unbiased=False) + 1e-8
+        adv_low_step = (adv_low_step - adv_low_mean) / adv_low_std
+
+        adv_high_mean = adv_high_seg.mean()
+        adv_high_std = adv_high_seg.std(unbiased=False) + 1e-8
+        adv_high_seg = (adv_high_seg - adv_high_mean) / adv_high_std
+
     advantages_low = adv_low_step.unsqueeze(-1) * lo_mask.to(torch.float32)    # (N,L)
     advantages_high = adv_high_seg.unsqueeze(-1) * hi_mask.to(torch.float32)  # (N,L)
 
@@ -337,6 +346,7 @@ def compute_hgae_advantage(
     batch.batch["returns_high"] = returns_high
     batch.batch["hgae_lo_mask"] = lo_mask
     batch.batch["hgae_hi_mask"] = hi_mask
+
 
     batch.batch["advantages"] = advantages_low + advantages_high
 

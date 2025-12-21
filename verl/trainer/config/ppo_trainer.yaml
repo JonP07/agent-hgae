@@ -245,6 +245,7 @@ algorithm:
     target_kl: 0.1
   hgae:
     lam_seg: 0.95
+    norm_adv: False
   use_pf_ppo: False
   pf_ppo:
     reweight_method: pow  # ["pow", "max_min", "max_random"]

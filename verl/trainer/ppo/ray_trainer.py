@@ -1249,15 +1249,27 @@ class RayPPOTrainer:
                         norm_adv_by_std_in_grpo = self.config.algorithm.get("norm_adv_by_std_in_grpo", True)  # GRPO adv normalization factor
 
                         if self.config.algorithm.adv_estimator == AdvantageEstimator.HGAE:
-                            hgae_cfg = HGAEConfig(
-                                gamma=self.config.algorithm.gamma,
-                                lam_turn=self.config.algorithm.lam,
-                                lam_seg=self.config.algorithm.hgae.lam_seg,
-                                value_key_low="value_low",
-                                value_key_high="value_high",
-                                assign_high_to_switch=True,
-                                assign_high_to_subgoal=True,
-                            )
+                            if self.config.algorithm.hgae.norm_adv:
+                                hgae_cfg = HGAEConfig(
+                                    gamma=self.config.algorithm.gamma,
+                                    lam_turn=self.config.algorithm.lam,
+                                    lam_seg=self.config.algorithm.hgae.lam_seg,
+                                    value_key_low="value_low",
+                                    value_key_high="value_high",
+                                    assign_high_to_switch=True,
+                                    assign_high_to_subgoal=True,
+                                    norm_adv=True,
+                                )
+                            else:
+                                hgae_cfg = HGAEConfig(
+                                    gamma=self.config.algorithm.gamma,
+                                    lam_turn=self.config.algorithm.lam,
+                                    lam_seg=self.config.algorithm.hgae.lam_seg,
+                                    value_key_low="value_low",
+                                    value_key_high="value_high",
+                                    assign_high_to_switch=True,
+                                    assign_high_to_subgoal=True,
+                                )
                             # import pdb; pdb.set_trace()
                             action_mask, subgoal_mask, switch_mask, is_new_subgoal = make_hgae_masks_and_switch(
                                 batch,
