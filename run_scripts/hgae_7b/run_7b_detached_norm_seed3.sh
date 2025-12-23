@@ -2,7 +2,7 @@ set -euo pipefail
 
 cd /code/hongpaul-sandbox/temp/agent-hgae/
 
-SESSION="alfworld_hgae_7b_seed2_detached_norm"
+SESSION="alfworld_hgae_7b_seed3_detached_norm"
 ENGINE=vllm
 SCRIPT_HGAE_7B="run_scripts/hgae_7b/run_hgae_7b_detached_norm.sh"
 
