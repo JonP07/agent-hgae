@@ -1091,14 +1091,6 @@ class RayPPOTrainer:
                                                                 envs=self.envs,
                                                                 is_train=True,
                                                                 )
-                        # inspect batch for debugging
-                        # print(gen_batch_output.non_tensor_batch.keys())
-                        # print(gen_batch_output.non_tensor_batch.get('turn_idx'))
-                        # print(gen_batch_output.non_tensor_batch.get('dones'))
-                        # print(gen_batch_output.non_tensor_batch.get('rewards'))
-                        # print(gen_batch_output.non_tensor_batch.get('traj_uid'))
-                        # print(len(gen_batch_output.non_tensor_batch.get('turn_idx')))
-                        # print(len(gen_batch_output.non_tensor_batch.get('dones'))) # batch_size * n_turns
                         
                         # inspect generated content for debugging
                         # for i in range(len(gen_batch_output.batch['input_ids'])):
