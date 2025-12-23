@@ -8,7 +8,7 @@ SCRIPT_HGAE_1_5B="run_scripts/hgae_1_5b/run_hgae_1_5b_detached_norm.sh"
 
 # Run C
 SEED_C=2
-GPUS_C="4,5,6,7"
+GPUS_C="0,1,2,3"
 
 tmux has-session -t $SESSION 2>/dev/null && tmux  kill-session -t $SESSION
 
