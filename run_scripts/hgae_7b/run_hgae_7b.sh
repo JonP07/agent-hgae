@@ -83,6 +83,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_agent_alfworld' \
+    trainer.log_val_generations=1 \
     trainer.experiment_name="hgae_qwen2.5_7b_seed_${SEED}" \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
