@@ -75,11 +75,10 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     algorithm.hgae.norm_adv=True \
     env.env_name=alfworld/AlfredTWEnvOptions \
-    env.seed=4 \
+    env.seed=2 \
     env.max_steps=50 \
     env.resources_per_worker.num_cpus=$num_cpus_per_env_worker \
     reward_model.reward_manager=multi_turn \
-    trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.log_val_generations=1 \
     trainer.project_name='verl_agent_alfworld' \

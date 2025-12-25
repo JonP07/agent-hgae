@@ -107,6 +107,7 @@ class HGAEConfig:
     assign_high_to_subgoal: bool = True
     include_tags_mask: bool = True
     norm_adv: bool = False  # whether to normalize advantages before masking
+    bootstrap_truncated: bool = True  # if episode truncates, bootstrap from current value
 
 
 @torch.no_grad()
@@ -169,6 +170,7 @@ def compute_hgae_advantage(
         switch_mask = switch_mask.to(device=device, dtype=torch.bool) & response_mask
 
     groups = _group_indices_by_traj(traj_uid)
+    zero = torch.tensor(0.0, device=device)
 
     # ============================================================
     # 0) Build segments (per trajectory) using boundary turns
@@ -211,14 +213,14 @@ def compute_hgae_advantage(
             continue
 
         for (s_pos, e_pos, nxt_pos) in segs:
-            next_adv = torch.tensor(0.0, device=device)
+            next_adv = zero
 
             # precompute bootstrap high value for this segment end
             if nxt_pos is not None:
                 next_boundary_i = idxs[nxt_pos]
                 boot_high = v_high[next_boundary_i].detach()
             else:
-                boot_high = torch.tensor(0.0, device=device)
+                boot_high = None
 
             for pos in range(e_pos, s_pos - 1, -1):
                 i = idxs[pos]
@@ -229,7 +231,15 @@ def compute_hgae_advantage(
                     v_next = v_low[idxs[pos + 1]]  # within segment
                 else:
                     # segment terminates here: bootstrap to next segment's high value (if episode continues)
-                    v_next = boot_high if not_done > 0 else torch.tensor(0.0, device=device)
+                    if not_done > 0:
+                        if boot_high is not None:
+                            v_next = boot_high
+                        elif cfg.bootstrap_truncated:
+                            v_next = v_low[i].detach()
+                        else:
+                            v_next = zero
+                    else:
+                        v_next = zero
 
                 delta = r[i] + cfg.gamma * not_done * v_next - v_low[i]
                 adv_i = delta + cfg.gamma * cfg.lam_turn * not_done * next_adv
@@ -252,7 +262,7 @@ def compute_hgae_advantage(
         if len(segs) == 0:
             continue
 
-        next_seg_adv = torch.tensor(0.0, device=device)
+        next_seg_adv = zero
 
         for k in range(len(segs) - 1, -1, -1):
             s_pos, e_pos, nxt_pos = segs[k]
@@ -271,11 +281,16 @@ def compute_hgae_advantage(
             done_end = bool(dones[end_i])
             not_done_end = 0.0 if done_end else 1.0
 
-            if (nxt_pos is not None) and (not_done_end > 0):
-                next_start_i = idxs[nxt_pos]
-                boot_v = v_high[next_start_i]
+            if not_done_end > 0:
+                if nxt_pos is not None:
+                    next_start_i = idxs[nxt_pos]
+                    boot_v = v_high[next_start_i]
+                elif cfg.bootstrap_truncated:
+                    boot_v = v_high[start_i].detach()
+                else:
+                    boot_v = zero
             else:
-                boot_v = torch.tensor(0.0, device=device)
+                boot_v = zero
 
             target = seg_return + (cfg.gamma ** d_k) * not_done_end * boot_v
             delta_k = target - v_high[start_i]
@@ -317,13 +332,17 @@ def compute_hgae_advantage(
 
     # optionally normalize advantages before masking
     if cfg.norm_adv:
-        adv_low_mean = adv_low_step.mean()
-        adv_low_std = adv_low_step.std(unbiased=False) + 1e-8
-        adv_low_step = (adv_low_step - adv_low_mean) / adv_low_std
+        lo_turn_mask = lo_mask.any(dim=1)
+        if lo_turn_mask.any():
+            adv_low_mean = adv_low_step[lo_turn_mask].mean()
+            adv_low_std = adv_low_step[lo_turn_mask].std(unbiased=False) + 1e-8
+            adv_low_step = (adv_low_step - adv_low_mean) / adv_low_std
 
-        adv_high_mean = adv_high_seg.mean()
-        adv_high_std = adv_high_seg.std(unbiased=False) + 1e-8
-        adv_high_seg = (adv_high_seg - adv_high_mean) / adv_high_std
+        hi_turn_mask = hi_mask.any(dim=1)
+        if hi_turn_mask.any():
+            adv_high_mean = adv_high_seg[hi_turn_mask].mean()
+            adv_high_std = adv_high_seg[hi_turn_mask].std(unbiased=False) + 1e-8
+            adv_high_seg = (adv_high_seg - adv_high_mean) / adv_high_std
 
     advantages_low = adv_low_step.unsqueeze(-1) * lo_mask.to(torch.float32)    # (N,L)
     advantages_high = adv_high_seg.unsqueeze(-1) * hi_mask.to(torch.float32)  # (N,L)

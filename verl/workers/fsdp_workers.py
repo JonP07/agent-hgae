@@ -1057,7 +1057,7 @@ class CriticWorker(Worker):
             data = self.ulysses_sharding_manager.preprocess_data(data=data)
             values = self.critic.compute_values(data=data)
             if self.config.use_two_heads_critic:
-                output = DataProto.from_dict(tensors={"value_high": values[0], "value_low": values[1]})
+                output = DataProto.from_dict(tensors={"value_high": values[1], "value_low": values[0]})
             else:
                 output = DataProto.from_dict(tensors={"values": values})
             output = self.ulysses_sharding_manager.postprocess_data(data=output)
