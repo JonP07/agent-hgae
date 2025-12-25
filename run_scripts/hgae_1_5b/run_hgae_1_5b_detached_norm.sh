@@ -81,9 +81,8 @@ python3 -m verl.trainer.main_ppo \
     env.seed=$SEED \
     env.max_steps=50 \
     env.resources_per_worker.num_cpus=$num_cpus_per_env_worker \
-    trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.log_val_generations=1 \
+    trainer.log_val_generations=10 \
     trainer.project_name='verl_agent_alfworld' \
     trainer.experiment_name="hgae_qwen2.5_1.5b_seed_${SEED}_fixed_critic" \
     trainer.n_gpus_per_node=4 \

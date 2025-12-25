@@ -166,3 +166,43 @@ AttributeError: '_thread.RLock' object has no attribute '_recursion_count'
 [36m(TaskRunner pid=3580532)[0m Training Progress:  17%|█▋        | 26/150 [2:34:43<12:45:12, 370.26s/it]
 [36m(TaskRunner pid=3580532)[0m Training Progress:  18%|█▊        | 27/150 [2:40:33<12:26:30, 364.15s/it]
 [36m(TaskRunner pid=3580532)[0m Training Progress:  19%|█▊        | 28/150 [2:46:03<11:59:44, 353.97s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  19%|█▉        | 29/150 [2:51:38<11:42:37, 348.41s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  20%|██        | 30/150 [2:59:32<12:51:54, 385.95s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  21%|██        | 31/150 [3:04:41<11:59:23, 362.72s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  21%|██▏       | 32/150 [3:09:50<11:22:00, 346.78s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  22%|██▏       | 33/150 [3:15:04<10:56:44, 336.79s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  23%|██▎       | 34/150 [3:20:18<10:37:55, 329.96s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  23%|██▎       | 35/150 [3:28:42<12:12:33, 382.20s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  24%|██▍       | 36/150 [3:33:37<11:16:32, 356.07s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  25%|██▍       | 37/150 [3:38:58<10:50:52, 345.60s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  25%|██▌       | 38/150 [3:44:11<10:27:04, 335.94s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  26%|██▌       | 39/150 [3:49:22<10:07:36, 328.43s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  27%|██▋       | 40/150 [3:57:10<11:18:36, 370.15s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  27%|██▋       | 41/150 [4:02:14<10:36:29, 350.37s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  28%|██▊       | 42/150 [4:07:32<10:13:20, 340.74s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  29%|██▊       | 43/150 [4:12:34<9:46:31, 328.90s/it] 
+[36m(TaskRunner pid=3580532)[0m Training Progress:  29%|██▉       | 44/150 [4:18:10<9:45:11, 331.24s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  30%|███       | 45/150 [4:26:09<10:57:11, 375.54s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  31%|███       | 46/150 [4:31:23<10:18:42, 356.94s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  31%|███▏      | 47/150 [4:36:49<9:57:07, 347.84s/it] 
+[36m(TaskRunner pid=3580532)[0m Training Progress:  32%|███▏      | 48/150 [4:42:27<9:45:58, 344.69s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  33%|███▎      | 49/150 [4:47:56<9:32:39, 340.19s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  33%|███▎      | 50/150 [4:56:25<10:51:13, 390.73s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  34%|███▍      | 51/150 [5:01:54<10:14:06, 372.19s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  35%|███▍      | 52/150 [5:07:24<9:47:25, 359.65s/it] 
+[36m(TaskRunner pid=3580532)[0m Training Progress:  35%|███▌      | 53/150 [5:12:48<9:23:55, 348.82s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  36%|███▌      | 54/150 [5:18:00<9:00:29, 337.81s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  37%|███▋      | 55/150 [5:26:18<10:11:07, 385.97s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  37%|███▋      | 56/150 [5:31:43<9:35:48, 367.54s/it] 
+[36m(TaskRunner pid=3580532)[0m Training Progress:  38%|███▊      | 57/150 [5:37:16<9:13:52, 357.33s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  39%|███▊      | 58/150 [5:42:44<8:54:12, 348.40s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  39%|███▉      | 59/150 [5:48:29<8:46:45, 347.32s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  40%|████      | 60/150 [5:57:06<9:57:29, 398.32s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  41%|████      | 61/150 [6:02:37<9:20:59, 378.20s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  41%|████▏     | 62/150 [6:08:06<8:52:52, 363.32s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  42%|████▏     | 63/150 [6:13:27<8:28:20, 350.58s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  43%|████▎     | 64/150 [6:18:40<8:06:33, 339.46s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  43%|████▎     | 65/150 [6:27:07<9:12:04, 389.70s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  44%|████▍     | 66/150 [6:32:36<8:40:11, 371.56s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  45%|████▍     | 67/150 [6:38:20<8:22:18, 363.11s/it]
+[36m(TaskRunner pid=3580532)[0m Training Progress:  45%|████▌     | 68/150 [6:44:05<8:08:58, 357.79s/it]
