@@ -71,7 +71,8 @@ python3 -m verl.trainer.main_ppo \
     critic.ppo_micro_batch_size_per_gpu=16 \
     critic.model.fsdp_config.param_offload=False \
     critic.model.fsdp_config.optimizer_offload=False \
-    critic.use_two_heads_critic=True \
+    critic.use_two_heads_critic=False \
+    critic.use_three_heads_critic=True \
     algorithm.use_kl_in_reward=False \
     algorithm.hgae.norm_adv=True \
     env.env_name=alfworld/AlfredTWEnvOptions \
@@ -82,7 +83,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.logger=['console','wandb'] \
     trainer.log_val_generations=10 \
     trainer.project_name='verl_agent_alfworld' \
-    trainer.experiment_name='hgae_qwen2.5_1.5b_seed_2_detached_norm_log' \
+    trainer.experiment_name='hgae_qwen2.5_1.5b_seed_1_regterm' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
