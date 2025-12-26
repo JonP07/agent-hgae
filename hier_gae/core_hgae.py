@@ -110,6 +110,8 @@ class HGAEConfig:
     include_tags_mask: bool = True
     norm_adv: bool = False  # whether to normalize advantages before masking
     bootstrap_truncated: bool = True  # if episode truncates, bootstrap from current value
+    keep_penalty: float = 0.0  # negative value penalizes KEEP decisions
+    keep_penalty_skip_first: bool = True  # don't penalize the first turn
 
 
 @torch.no_grad()
@@ -133,6 +135,13 @@ def compute_hgae_advantage(
     switch = np.asarray(batch.non_tensor_batch["switch"]).astype(np.bool_)
 
     r = _as_torch_1d(batch.non_tensor_batch["rewards"], device=device, dtype=torch.float32)  # (N,)
+    if cfg.keep_penalty != 0.0:
+        switch_t = torch.as_tensor(switch, device=device, dtype=torch.bool)
+        keep_mask = ~switch_t
+        if cfg.keep_penalty_skip_first:
+            keep_mask = keep_mask & torch.as_tensor(turn_idx > 0, device=device, dtype=torch.bool)
+        if keep_mask.any():
+            r = r + keep_mask.to(torch.float32) * cfg.keep_penalty
 
     # ---- helper: robustly pick value at masked position, fallback to last valid token if mask is empty ----
     def pick_value(v_tok: torch.Tensor, v_mask: torch.Tensor) -> torch.Tensor:

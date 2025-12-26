@@ -77,6 +77,8 @@ python3 -m verl.trainer.main_ppo \
     critic.use_three_heads_critic=True \
     algorithm.use_kl_in_reward=False \
     algorithm.hgae.norm_adv=True \
+    algorithm.hgae.keep_penalty=-0.01 \
+    algorithm.hgae.keep_penalty_skip_first=True \
     env.env_name=alfworld/AlfredTWEnvOptions \
     env.seed=$SEED \
     env.max_steps=50 \
@@ -85,7 +87,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.logger=['console','wandb'] \
     trainer.log_val_generations=10 \
     trainer.project_name='verl_agent_alfworld' \
-    trainer.experiment_name="hgae_qwen2.5_1.5b_seed_${SEED}_detached_norm_log" \
+    trainer.experiment_name="hgae_qwen2.5_1.5b_seed_${SEED}_regterm_001" \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \

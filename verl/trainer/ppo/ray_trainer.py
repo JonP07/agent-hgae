@@ -1248,6 +1248,8 @@ class RayPPOTrainer:
                                     lam_seg=self.config.algorithm.hgae.lam_seg,
                                     value_key_low="value_low",
                                     value_key_high="value_high",
+                                    keep_penalty=self.config.algorithm.hgae.get("keep_penalty", 0.0),
+                                    keep_penalty_skip_first=self.config.algorithm.hgae.get("keep_penalty_skip_first", True),
                                     assign_high_to_switch=True,
                                     assign_high_to_subgoal=True,
                                     norm_adv=True,
@@ -1259,6 +1261,8 @@ class RayPPOTrainer:
                                     lam_seg=self.config.algorithm.hgae.lam_seg,
                                     value_key_low="value_low",
                                     value_key_high="value_high",
+                                    keep_penalty=self.config.algorithm.hgae.get("keep_penalty", 0.0),
+                                    keep_penalty_skip_first=self.config.algorithm.hgae.get("keep_penalty_skip_first", True),
                                     assign_high_to_switch=False,
                                     assign_high_to_subgoal=True,
                                 )

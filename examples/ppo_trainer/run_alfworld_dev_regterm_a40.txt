@@ -282,3 +282,33 @@ AttributeError: '_thread.RLock' object has no attribute '_recursion_count'
 [36m(TaskRunner pid=2056864)[0m wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
 [36m(TaskRunner pid=2056864)[0m wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
 [36m(TaskRunner pid=2056864)[0m Training Progress:   0%|          | 0/150 [00:00<?, ?it/s]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   1%|          | 1/150 [15:36<38:44:53, 936.20s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   1%|▏         | 2/150 [31:01<38:13:19, 929.72s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   2%|▏         | 3/150 [46:03<37:27:18, 917.27s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   3%|▎         | 4/150 [1:01:12<37:03:26, 913.74s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   3%|▎         | 5/150 [1:24:21<43:42:56, 1085.35s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   4%|▍         | 6/150 [1:39:21<40:53:11, 1022.17s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   5%|▍         | 7/150 [1:54:40<39:15:45, 988.43s/it] 
+[36m(TaskRunner pid=2056864)[0m Training Progress:   5%|▌         | 8/150 [2:09:40<37:52:49, 960.35s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   6%|▌         | 9/150 [2:24:59<37:06:07, 947.29s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   7%|▋         | 10/150 [2:48:15<42:13:44, 1085.89s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   7%|▋         | 11/150 [3:03:27<39:52:14, 1032.62s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   8%|▊         | 12/150 [3:18:55<38:21:46, 1000.78s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:   9%|▊         | 13/150 [3:34:00<36:58:48, 971.74s/it] 
+[36m(TaskRunner pid=2056864)[0m Training Progress:   9%|▉         | 14/150 [3:49:11<36:01:41, 953.69s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  10%|█         | 15/150 [4:14:01<41:49:20, 1115.26s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  11%|█         | 16/150 [4:30:19<39:58:30, 1073.96s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  11%|█▏        | 17/150 [4:46:09<38:18:00, 1036.70s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  12%|█▏        | 18/150 [5:01:11<36:31:21, 996.07s/it] 
+[36m(TaskRunner pid=2056864)[0m Training Progress:  13%|█▎        | 19/150 [5:16:39<35:30:27, 975.78s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  13%|█▎        | 20/150 [5:40:48<40:22:02, 1117.86s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  14%|█▍        | 21/150 [5:56:59<38:28:27, 1073.70s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  15%|█▍        | 22/150 [6:12:50<36:51:49, 1036.80s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  15%|█▌        | 23/150 [6:28:21<35:27:32, 1005.14s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  16%|█▌        | 24/150 [6:44:20<34:41:58, 991.41s/it] 
+[36m(TaskRunner pid=2056864)[0m Training Progress:  17%|█▋        | 25/150 [7:09:53<40:03:27, 1153.66s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  17%|█▋        | 26/150 [7:26:07<37:52:49, 1099.75s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  18%|█▊        | 27/150 [7:43:20<36:53:32, 1079.77s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  19%|█▊        | 28/150 [8:00:40<36:11:06, 1067.76s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  19%|█▉        | 29/150 [8:17:51<35:31:11, 1056.79s/it]
+[36m(TaskRunner pid=2056864)[0m Training Progress:  20%|██        | 30/150 [8:44:49<40:50:34, 1225.29s/it]

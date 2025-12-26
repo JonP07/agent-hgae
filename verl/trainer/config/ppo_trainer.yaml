@@ -249,6 +249,8 @@ algorithm:
   hgae:
     lam_seg: 0.95
     norm_adv: False
+    keep_penalty: 0.0
+    keep_penalty_skip_first: True
   use_pf_ppo: False
   pf_ppo:
     reweight_method: pow  # ["pow", "max_min", "max_random"]
