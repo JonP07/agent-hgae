@@ -1259,7 +1259,7 @@ class RayPPOTrainer:
                                     lam_seg=self.config.algorithm.hgae.lam_seg,
                                     value_key_low="value_low",
                                     value_key_high="value_high",
-                                    assign_high_to_switch=True,
+                                    assign_high_to_switch=False,
                                     assign_high_to_subgoal=True,
                                 )
                             # import pdb; pdb.set_trace()
@@ -1270,7 +1270,7 @@ class RayPPOTrainer:
                             )
                             batch.non_tensor_batch['switch'] = is_new_subgoal
                             # build the value masking, for now we want one (or two at boundary) values per turn
-                            batch.batch["value_mask_high"], batch.batch["value_mask_low"] = compute_value_mask(batch, self.tokenizer)
+                            batch.batch["value_mask_high"], batch.batch["value_mask_low"], batch.batch["value_mask_term"] = compute_value_mask(batch, self.tokenizer)
                             # pdb.set_trace()
                             batch = compute_hgae_advantage(
                                 batch,
@@ -1279,7 +1279,7 @@ class RayPPOTrainer:
                                 subgoal_mask=subgoal_mask,
                                 switch_mask=switch_mask)
                             # building loss mask for HGAE actor update
-                            resp_train_mask = (batch.batch["hgae_lo_mask"] | batch.batch["hgae_hi_mask"])  # (N, L) bool
+                            resp_train_mask = (batch.batch["hgae_lo_mask"] | batch.batch["hgae_hi_mask"] | batch.batch["hgae_term_mask"])  # (N, L) bool
                             resp_train_mask = resp_train_mask & batch.batch["response_mask"].bool()
                             attn = batch.batch["attention_mask"]
                             L = batch.batch["responses"].size(1)

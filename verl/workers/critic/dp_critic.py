@@ -117,14 +117,22 @@ class DataParallelPPOCritic(BasePPOCritic):
                 values = output.logits
             # for debugging add breakpoint
             # import pdb; pdb.set_trace()
-            # values shape (batch, seq_len) if one critic, (batch, seq_len, 2) if two critics
+            # values shape (batch, seq_len) if one critic, (batch, seq_len, 2/3) if multi-head critics
             if values.dim() == 2:
                 values = values[:, -response_length - 1 : -1].squeeze(-1)
                 return values
             elif values.dim() == 3:
-                values_low = values[:, -response_length - 1 : -1, 0]
-                values_high = values[:, -response_length - 1 : -1, 1]
-                return values_low, values_high
+                values = values[:, -response_length - 1 : -1, :]
+                if values.size(-1) == 2:
+                    values_low = values[:, :, 0]
+                    values_high = values[:, :, 1]
+                    return values_low, values_high
+                if values.size(-1) == 3:
+                    values_low = values[:, :, 0]
+                    values_high = values[:, :, 1]
+                    values_term = values[:, :, 2]
+                    return values_low, values_high, values_term
+                raise ValueError(f"Unexpected values last-dim: {values.size(-1)}")
             else:
                 raise ValueError(f"Unexpected values size: {values.size()}")
 
@@ -155,7 +163,8 @@ class DataParallelPPOCritic(BasePPOCritic):
         use_dynamic_bsz = data.meta_info["use_dynamic_bsz"]
         has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
 
-        use_two_value_heads = bool(self.config.get("use_two_heads_critic", False))
+        use_three_value_heads = bool(self.config.get("use_three_heads_critic", False))
+        use_two_value_heads = bool(self.config.get("use_two_heads_critic", False)) and not use_three_value_heads
 
         if has_multi_modal_inputs:
             num_micro_batches = data.batch.batch_size[0] // micro_batch_size
@@ -169,7 +178,8 @@ class DataParallelPPOCritic(BasePPOCritic):
             micro_batches = batch.split(micro_batch_size)
 
         values_lst = []
-        values_high_lst = [] if use_two_value_heads else None
+        values_high_lst = [] if use_two_value_heads or use_three_value_heads else None
+        values_term_lst = [] if use_three_value_heads else None
         for micro_batch in micro_batches:
             if isinstance(micro_batch, DataProto):
                 micro_batch = {**micro_batch.batch, **micro_batch.non_tensor_batch}
@@ -182,12 +192,20 @@ class DataParallelPPOCritic(BasePPOCritic):
                 if values_high_lst is None:
                     raise RuntimeError("values_high_lst is None but use_two_value_heads is True")
                 values_high_lst.append(values_high)
+            elif use_three_value_heads:
+                values_low, values_high, values_term = values
+                values_lst.append(values_low)
+                if values_high_lst is None or values_term_lst is None:
+                    raise RuntimeError("values_high_lst/values_term_lst is None but use_three_value_heads is True")
+                values_high_lst.append(values_high)
+                values_term_lst.append(values_term)
             else:
                 values_lst.append(values)
         # for debugging add breakpoint
         # import pdb; pdb.set_trace()
         values = torch.concat(values_lst, dim=0)
-        values_high = torch.concat(values_high_lst, dim=0) if use_two_value_heads else None
+        values_high = torch.concat(values_high_lst, dim=0) if (use_two_value_heads or use_three_value_heads) else None
+        values_term = torch.concat(values_term_lst, dim=0) if use_three_value_heads else None
         responses = data.batch["responses"]
         attention_mask = data.batch["attention_mask"]
         response_length = responses.size(1)
@@ -197,11 +215,16 @@ class DataParallelPPOCritic(BasePPOCritic):
             assert len(indices) == values.size(0), f"{len(indices)} vs. {values.size()}"
             revert_indices = torch.tensor(get_reverse_idx(indices), dtype=torch.long)
             values = values[revert_indices]
-            if use_two_value_heads:
+            if use_two_value_heads or use_three_value_heads:
                 values_high = values_high[revert_indices]
+            if use_three_value_heads:
+                values_term = values_term[revert_indices]
         values = values * attention_mask[:, -response_length - 1 : -1]
-        if use_two_value_heads:
+        if use_two_value_heads or use_three_value_heads:
             values_high = values_high * attention_mask[:, -response_length - 1 : -1]
+            if use_three_value_heads:
+                values_term = values_term * attention_mask[:, -response_length - 1 : -1]
+                return values, values_high, values_term
             return values, values_high
         return values
 
@@ -210,23 +233,33 @@ class DataParallelPPOCritic(BasePPOCritic):
         # make sure we are in training mode
         self.critic_module.train()
         metrics = {}
-        use_two_value_heads = bool(self.config.get("use_two_heads_critic", False))
-        high_value_coef = self.config.get("high_value_coef", 1.0) if use_two_value_heads else 0.0
-        if use_two_value_heads:
+        use_three_value_heads = bool(self.config.get("use_three_heads_critic", False))
+        use_two_value_heads = bool(self.config.get("use_two_heads_critic", False)) and not use_three_value_heads
+        high_value_coef = self.config.get("high_value_coef", 1.0) if (use_two_value_heads or use_three_value_heads) else 0.0
+        term_value_coef = self.config.get("term_value_coef", 1.0) if use_three_value_heads else 0.0
+        if use_three_value_heads:
+            select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "value_low", "value_high", "value_term", "returns_low", "returns_high", "returns_term"]
+        elif use_two_value_heads:
             select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "value_low", "value_high", "returns_low", "returns_high"]
         else:
             select_keys = ["input_ids", "responses", "attention_mask", "position_ids", "values", "returns"]
         avail_keys = set(data.batch.keys()).union(set(data.non_tensor_batch.keys())) if isinstance(data, DataProto) else set()
         if use_two_value_heads and "value_high" in avail_keys:
             select_keys.append("value_high")
+        if use_three_value_heads and "value_term" in avail_keys:
+            select_keys.append("value_term")
         if "returns_high" in avail_keys:
             select_keys.append("returns_high")
         if "returns_low" in avail_keys:
             select_keys.append("returns_low")
+        if "returns_term" in avail_keys:
+            select_keys.append("returns_term")
         if "value_mask_low" in avail_keys:
             select_keys.append("value_mask_low")
         if "value_mask_high" in avail_keys:
             select_keys.append("value_mask_high")
+        if "value_mask_term" in avail_keys:
+            select_keys.append("value_mask_term")
         batch = data.select(batch_keys=select_keys).batch
         has_multi_modal_inputs = "multi_modal_inputs" in data.non_tensor_batch.keys()
 
@@ -263,7 +296,7 @@ class DataParallelPPOCritic(BasePPOCritic):
                         data = data.to(get_torch_device().current_device())  # critic device is cpu when using offload
                     responses = data["responses"]
                     attention_mask = data["attention_mask"]
-                    if not use_two_value_heads:
+                    if not use_two_value_heads and not use_three_value_heads:
                         values = data["values"]
                         returns = data["returns"]
                     response_length = responses.size(1)
@@ -275,9 +308,13 @@ class DataParallelPPOCritic(BasePPOCritic):
 
                     if use_two_value_heads:
                         vpred_low, vpred_high = vpreds
+                        vpred_term = None
+                    elif use_three_value_heads:
+                        vpred_low, vpred_high, vpred_term = vpreds
                     else:
                         vpred_low = vpreds
                         vpred_high = None
+                        vpred_term = None
 
                     # assert not torch.any(torch.isnan(vpreds)).item()
                     mask_low = response_mask
@@ -288,7 +325,11 @@ class DataParallelPPOCritic(BasePPOCritic):
                     has_high_targets = ("returns_high" in data) and ("value_mask_high" in data)
                     if has_high_targets:
                         mask_high = (data['value_mask_high'].bool()) & (response_mask.bool())
-                    if use_two_value_heads:
+                    mask_term = None
+                    has_term_targets = use_three_value_heads and ("returns_term" in data) and ("value_mask_term" in data)
+                    if has_term_targets:
+                        mask_term = (data["value_mask_term"].bool()) & (response_mask.bool())
+                    if use_two_value_heads or use_three_value_heads:
                         values_low_old = data["value_low"]
                         returns_low = data["returns_low"]
                     else:
@@ -313,11 +354,11 @@ class DataParallelPPOCritic(BasePPOCritic):
                     vf_clipfrac_high = None
                     if has_high_targets and mask_high is not None and mask_high.any():
                         returns_high = data["returns_high"]
-                        if use_two_value_heads and ("value_high" in data):
+                        if (use_two_value_heads or use_three_value_heads) and ("value_high" in data):
                             values_high_old = data["value_high"]
                         else:
                             values_high_old = data.get("value_high", values_low_old)
-                        vpred_for_high = vpred_high if (use_two_value_heads and vpred_high is not None) else vpred_low
+                        vpred_for_high = vpred_high if (use_two_value_heads or use_three_value_heads) and vpred_high is not None else vpred_low
                         
                         vf_high, vf_clipfrac_high = core_algos.compute_value_loss(
                         vpreds=vpred_for_high,
@@ -328,6 +369,24 @@ class DataParallelPPOCritic(BasePPOCritic):
                         loss_agg_mode=self.config.loss_agg_mode,
                     )
                         total_vf = total_vf + high_value_coef * vf_high
+                    vf_term = None
+                    vf_clipfrac_term = None
+                    if has_term_targets and mask_term is not None and mask_term.any():
+                        returns_term = data["returns_term"]
+                        if use_three_value_heads and ("value_term" in data):
+                            values_term_old = data["value_term"]
+                        else:
+                            values_term_old = data.get("value_term", values_low_old)
+                        vpred_for_term = vpred_term if (use_three_value_heads and vpred_term is not None) else vpred_low
+                        vf_term, vf_clipfrac_term = core_algos.compute_value_loss(
+                            vpreds=vpred_for_term,
+                            values=values_term_old,
+                            returns=returns_term,
+                            response_mask=mask_term,
+                            cliprange_value=self.config.cliprange_value,
+                            loss_agg_mode=self.config.loss_agg_mode,
+                        )
+                        total_vf = total_vf + term_value_coef * vf_term
                     # pdb.set_trace()
                     # vf_loss, vf_clipfrac = core_algos.compute_value_loss(
                     #     vpreds=vpreds,
@@ -352,10 +411,11 @@ class DataParallelPPOCritic(BasePPOCritic):
                     "critic/vpred_mean_low": (masked_mean(vpred_low, mask_low).detach().item() if mask_low.any() else 0.0),
                     "critic/mask_tokens_low": float(mask_low.sum().detach().item()),
                     "critic/use_two_heads_critic": float(use_two_value_heads),
+                    "critic/use_three_heads_critic": float(use_three_value_heads),
                     }
 
                     if vf_high is not None:
-                        vpred_for_high = vpred_high if (use_two_value_heads and vpred_high is not None) else vpred_low
+                        vpred_for_high = vpred_high if ((use_two_value_heads or use_three_value_heads) and vpred_high is not None) else vpred_low
                         log.update(
                         {
                             "critic/vf_loss_high": vf_high.detach().item(),
@@ -373,6 +433,27 @@ class DataParallelPPOCritic(BasePPOCritic):
                                 "critic/vpred_mean_high": 0.0,
                                 "critic/mask_tokens_high": 0.0,
                                 "critic/high_vf_coef": high_value_coef,
+                            }
+                        )
+                    if vf_term is not None:
+                        vpred_for_term = vpred_term if (use_three_value_heads and vpred_term is not None) else vpred_low
+                        log.update(
+                            {
+                                "critic/vf_loss_term": vf_term.detach().item(),
+                                "critic/vf_clipfrac_term": vf_clipfrac_term.detach().item() if vf_clipfrac_term is not None else 0.0,
+                                "critic/vpred_mean_term": (masked_mean(vpred_for_term, mask_term).detach().item() if mask_term.any() else 0.0),
+                                "critic/mask_tokens_term": float(mask_term.sum().detach().item()),
+                                "critic/term_vf_coef": term_value_coef,
+                            }
+                        )
+                    else:
+                        log.update(
+                            {
+                                "critic/vf_loss_term": 0.0,
+                                "critic/vf_clipfrac_term": 0.0,
+                                "critic/vpred_mean_term": 0.0,
+                                "critic/mask_tokens_term": 0.0,
+                                "critic/term_vf_coef": term_value_coef,
                             }
                         )
 

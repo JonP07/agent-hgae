@@ -217,6 +217,11 @@ def compute_hgae_metrics(batch: DataProto) -> Dict[str, Any]:
     advantages_high = batch.batch["advantages_high"]
     returns_high = batch.batch["returns_high"]
     values_high = batch.batch["value_high"]
+    has_term = "advantages_term" in batch.batch and "returns_term" in batch.batch and "value_term" in batch.batch
+    if has_term:
+        advantages_term = batch.batch["advantages_term"]
+        returns_term = batch.batch["returns_term"]
+        values_term = batch.batch["value_term"]
     max_response_length = batch.batch["responses"].shape[-1]
     prompt_mask = batch.batch["attention_mask"][:, :-max_response_length].bool()
     response_mask = batch.batch["attention_mask"][:, -max_response_length:].bool()
@@ -241,6 +246,12 @@ def compute_hgae_metrics(batch: DataProto) -> Dict[str, Any]:
     valid_values_high = torch.masked_select(values_high, response_mask)
     return_diff_var_high = torch.var(valid_returns_high - valid_values_high)
     return_var_high = torch.var(valid_returns_high)
+    if has_term:
+        valid_adv_term = torch.masked_select(advantages_term, response_mask)
+        valid_returns_term = torch.masked_select(returns_term, response_mask)
+        valid_values_term = torch.masked_select(values_term, response_mask)
+        return_diff_var_term = torch.var(valid_returns_term - valid_values_term)
+        return_var_term = torch.var(valid_returns_term)
     metrics = {
         # score
         "critic/score/mean": torch.mean(sequence_score).detach().item(),
@@ -278,6 +289,23 @@ def compute_hgae_metrics(batch: DataProto) -> Dict[str, Any]:
         "critic/values_high/min": torch.min(valid_values_high).detach().item(),
         # vf explained var high
         "critic/vf_explained_var_high": (1.0 - return_diff_var_high / (return_var_high + 1e-5)).detach().item(),
+        # adv term
+        **(
+            {
+                "critic/advantages_term/mean": torch.mean(valid_adv_term).detach().item(),
+                "critic/advantages_term/max": torch.max(valid_adv_term).detach().item(),
+                "critic/advantages_term/min": torch.min(valid_adv_term).detach().item(),
+                "critic/returns_term/mean": torch.mean(valid_returns_term).detach().item(),
+                "critic/returns_term/max": torch.max(valid_returns_term).detach().item(),
+                "critic/returns_term/min": torch.min(valid_returns_term).detach().item(),
+                "critic/values_term/mean": torch.mean(valid_values_term).detach().item(),
+                "critic/values_term/max": torch.max(valid_values_term).detach().item(),
+                "critic/values_term/min": torch.min(valid_values_term).detach().item(),
+                "critic/vf_explained_var_term": (1.0 - return_diff_var_term / (return_var_term + 1e-5)).detach().item(),
+            }
+            if has_term
+            else {}
+        ),
         # response length
         "response_length/mean": torch.mean(response_length).detach().item(),
         "response_length/max": torch.max(response_length).detach().item(),

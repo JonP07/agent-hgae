@@ -102,9 +102,11 @@ class HGAEConfig:
     # where to read low/high values from
     value_key_low: str = "value_low"
     value_key_high: Optional[str] = "value_high"  # if None or missing, reuse low
+    value_key_term: str = "value_term"
     # assign high-level advantage to which tokens
     assign_high_to_switch: bool = False
     assign_high_to_subgoal: bool = True
+    assign_term_to_switch: bool = True
     include_tags_mask: bool = True
     norm_adv: bool = False  # whether to normalize advantages before masking
     bootstrap_truncated: bool = True  # if episode truncates, bootstrap from current value
@@ -152,6 +154,14 @@ def compute_hgae_advantage(
         v_high = pick_value(v_high_tok, v_high_mask)       # (N,)
     else:
         v_high = v_low  # single-head fallback
+
+    has_term = (cfg.value_key_term in batch.batch) and ("value_mask_term" in batch.batch)
+    if has_term:
+        v_term_tok = batch.batch[cfg.value_key_term]       # (N, L)
+        v_term_mask = batch.batch["value_mask_term"]       # (N, L) bool
+        v_term = pick_value(v_term_tok, v_term_mask)       # (N,)
+    else:
+        v_term = None
 
     # ---- default token masks ----
     if action_mask is None:
@@ -255,13 +265,14 @@ def compute_hgae_advantage(
     # ============================================================
     adv_high_seg = torch.zeros((N,), device=device, dtype=torch.float32)
     ret_high_seg = torch.zeros((N,), device=device, dtype=torch.float32)
+    adv_term_step = torch.zeros((N,), device=device, dtype=torch.float32)
+    ret_term_step = torch.zeros((N,), device=device, dtype=torch.float32)
 
     for tid, idxs in groups.items():
         idxs = sorted(idxs, key=lambda i: turn_idx[i])
         segs = traj_segments[tid]
         if len(segs) == 0:
             continue
-
         next_seg_adv = zero
 
         for k in range(len(segs) - 1, -1, -1):
@@ -302,6 +313,27 @@ def compute_hgae_advantage(
 
             next_seg_adv = seg_adv_k
 
+            # ---- termination returns over this segment (per turn) ----
+            if has_term:
+                done_end = bool(dones[end_i])
+                not_done_end = 0.0 if done_end else 1.0
+                if not_done_end > 0:
+                    if nxt_pos is not None:
+                        next_start_i = idxs[nxt_pos]
+                        boot_high = v_high[next_start_i].detach()
+                    elif cfg.bootstrap_truncated:
+                        boot_high = v_high[start_i].detach()
+                    else:
+                        boot_high = zero
+                else:
+                    boot_high = zero
+
+                ret_next = boot_high
+                for pos in range(e_pos, s_pos - 1, -1):
+                    i = idxs[pos]
+                    ret_next = r[i] + cfg.gamma * ret_next
+                    ret_term_step[i] = ret_next
+
     # ============================================================
     # 3) Token assignment + masks
     # ============================================================
@@ -329,6 +361,13 @@ def compute_hgae_advantage(
 
     # low-level advantage goes to action tokens (you control action_mask)
     lo_mask = action_mask
+    # termination advantage goes to switch tokens on all turns
+    term_mask = torch.zeros_like(response_mask, dtype=torch.bool)
+    if cfg.assign_term_to_switch and has_term:
+        term_mask |= switch_mask
+
+    if has_term:
+        adv_term_step = ret_term_step - v_term
 
     # optionally normalize advantages before masking
     if cfg.norm_adv:
@@ -343,9 +382,19 @@ def compute_hgae_advantage(
             adv_high_mean = adv_high_seg[hi_turn_mask].mean()
             adv_high_std = adv_high_seg[hi_turn_mask].std(unbiased=False) + 1e-8
             adv_high_seg = (adv_high_seg - adv_high_mean) / adv_high_std
+        if has_term:
+            term_turn_mask = term_mask.any(dim=1)
+            if term_turn_mask.any():
+                adv_term_mean = adv_term_step[term_turn_mask].mean()
+                adv_term_std = adv_term_step[term_turn_mask].std(unbiased=False) + 1e-8
+                adv_term_step = (adv_term_step - adv_term_mean) / adv_term_std
 
     advantages_low = adv_low_step.unsqueeze(-1) * lo_mask.to(torch.float32)    # (N,L)
     advantages_high = adv_high_seg.unsqueeze(-1) * hi_mask.to(torch.float32)  # (N,L)
+    if has_term:
+        advantages_term = adv_term_step.unsqueeze(-1) * term_mask.to(torch.float32)  # (N,L)
+    else:
+        advantages_term = torch.zeros_like(advantages_low)
 
     # returns should align with critic masks (value_mask_low/high)
     vmask_low = (batch.batch["value_mask_low"].to(device=device, dtype=torch.bool) & response_mask)
@@ -357,17 +406,26 @@ def compute_hgae_advantage(
     else:
         vmask_high = torch.zeros_like(response_mask, dtype=torch.bool)
         returns_high = torch.zeros_like(response_mask, dtype=torch.float32)
+    if has_term:
+        vmask_term = (batch.batch["value_mask_term"].to(device=device, dtype=torch.bool) & response_mask)
+        returns_term = ret_term_step.unsqueeze(-1) * vmask_term.to(torch.float32)
+    else:
+        vmask_term = torch.zeros_like(response_mask, dtype=torch.bool)
+        returns_term = torch.zeros_like(response_mask, dtype=torch.float32)
 
     # store outputs
     batch.batch["advantages_low"] = advantages_low
     batch.batch["returns_low"] = returns_low
     batch.batch["advantages_high"] = advantages_high
     batch.batch["returns_high"] = returns_high
+    batch.batch["advantages_term"] = advantages_term
+    batch.batch["returns_term"] = returns_term
     batch.batch["hgae_lo_mask"] = lo_mask
     batch.batch["hgae_hi_mask"] = hi_mask
+    batch.batch["hgae_term_mask"] = term_mask
 
 
-    batch.batch["advantages"] = advantages_low + advantages_high
+    batch.batch["advantages"] = advantages_low + advantages_high + advantages_term
 
 
     return batch
@@ -386,6 +444,7 @@ def compute_value_mask(
     Produces:
       value_mask_high: (N, L) boolean tensor
       value_mask_low: (N, L) boolean tensor
+      value_mask_term: (N, L) boolean tensor
     """
     device = batch.batch["response_mask"].device
     response_mask = batch.batch["response_mask"].to(torch.bool)  # (N, L)
@@ -404,6 +463,7 @@ def compute_value_mask(
 
     value_mask_high = torch.zeros((N, L), device=device, dtype=torch.bool)
     value_mask_low = torch.zeros((N, L), device=device, dtype=torch.bool)
+    value_mask_term = torch.zeros((N, L), device=device, dtype=torch.bool)
 
     groups = _group_indices_by_traj(traj_uid)
 
@@ -506,7 +566,11 @@ def compute_value_mask(
                                 # no </subgoal> or </switch> found, fallback to first token as low-level value
                                 value_mask_low[i, 0] = True
                 # pdb.set_trace()
-    return value_mask_high, value_mask_low
+            # term head: one value per turn at first valid response token
+            if response_mask[i].any():
+                first_pos = int(response_mask[i].float().argmax().item())
+                value_mask_term[i, first_pos] = True
+    return value_mask_high, value_mask_low, value_mask_term
 
 if __name__ == "__main__":
     from verl.utils import hf_processor, hf_tokenizer

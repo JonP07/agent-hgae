@@ -152,6 +152,9 @@ actor_rollout_ref:
 critic:
   rollout_n: ${actor_rollout_ref.rollout.n}
   use_two_heads_critic: False
+  use_three_heads_critic: False
+  high_value_coef: 1.0
+  term_value_coef: 1.0
   strategy: fsdp # [fsdp, fsdp2]
   optim:
     lr: 1e-5
