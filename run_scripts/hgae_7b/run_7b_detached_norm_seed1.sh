@@ -2,13 +2,13 @@ set -euo pipefail
 
 cd /code/hongpaul-sandbox/temp/agent-hgae/
 
-SESSION="alfworld_hgae_7b_seed1_detached_norm"
+SESSION="alfworld_hgae_7b_seed1_norm"
 ENGINE=vllm
-SCRIPT_HGAE_7B="run_scripts/hgae_7b/run_hgae_7b_detached_norm.sh"
+SCRIPT_HGAE_7B="run_scripts/hgae_7b/run_hgae_7b_norm.sh"
 
 # Run C
 SEED_C=1
-GPUS_C="4,5,6,7"
+GPUS_C="0,1,2,3"
 
 tmux has-session -t $SESSION 2>/dev/null && tmux  kill-session -t $SESSION
 

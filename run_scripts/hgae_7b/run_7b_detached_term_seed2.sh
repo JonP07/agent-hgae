@@ -2,9 +2,9 @@ set -euo pipefail
 
 cd /code/hongpaul-sandbox/temp/agent-hgae/
 
-SESSION="alfworld_hgae_7b_seed2_norm"
+SESSION="alfworld_hgae_7b_seed2_term"
 ENGINE=vllm
-SCRIPT_HGAE_7B="run_scripts/hgae_7b/run_hgae_7b_norm.sh"
+SCRIPT_HGAE_7B="run_scripts/hgae_7b/run_hgae_7b_term.sh"
 
 # Run C
 SEED_C=2

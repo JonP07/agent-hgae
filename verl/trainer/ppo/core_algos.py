@@ -108,6 +108,108 @@ def compute_gae_advantage_return(
         advantages = verl_F.masked_whiten(advantages, response_mask)
     return advantages, returns
 
+
+def compute_turn_gae_advantage_return(
+    token_level_rewards: torch.Tensor,
+    values: torch.Tensor,
+    response_mask: torch.Tensor,
+    traj_ids: np.ndarray,
+    turn_idx: np.ndarray,
+    dones: np.ndarray,
+    gamma: torch.Tensor,
+    lam: torch.Tensor,
+):
+    """Compute turn-level GAE for multi-turn PPO and broadcast to tokens.
+
+    Each sample in the batch corresponds to one turn. We compute a single
+    advantage per turn (using turn-level rewards and values), then assign that
+    advantage to all response tokens in the same turn.
+
+    Returns are aligned to the first response token via a value mask so that
+    critic updates train against one value target per turn.
+
+    Args:
+        token_level_rewards: (bs, response_length)
+        values: (bs, response_length)
+        response_mask: (bs, response_length)
+        traj_ids: (bs,) trajectory identifier per turn
+        turn_idx: (bs,) turn index within trajectory
+        dones: (bs,) terminal flags per turn
+        gamma: scalar discount
+        lam: scalar GAE lambda
+
+    Returns:
+        advantages: (bs, response_length)
+        returns: (bs, response_length)
+        value_mask: (bs, response_length) mask for critic targets
+    """
+    with torch.no_grad():
+        device = token_level_rewards.device
+        dtype = token_level_rewards.dtype
+        response_mask = response_mask.to(dtype=dtype)
+        batch_size = token_level_rewards.size(0)
+
+        if len(traj_ids) != batch_size or len(turn_idx) != batch_size or len(dones) != batch_size:
+            raise ValueError("turn-level GAE inputs must match batch size.")
+
+        turn_has_tokens = response_mask.sum(dim=1) > 0
+        turn_rewards = (token_level_rewards * response_mask).sum(dim=1)
+        first_token_values = values[:, 0]
+        turn_values = torch.where(turn_has_tokens, first_token_values, torch.zeros_like(first_token_values))
+
+        turn_adv_raw = torch.zeros_like(turn_values)
+        turn_returns = torch.zeros_like(turn_values)
+
+        gamma_f = float(gamma.item() if isinstance(gamma, torch.Tensor) else gamma)
+        lam_f = float(lam.item() if isinstance(lam, torch.Tensor) else lam)
+        zero = torch.zeros((), device=device, dtype=dtype)
+
+        traj_to_turns: dict[object, dict[int, list[int]]] = {}
+        for i in range(len(traj_ids)):
+            traj = traj_ids[i]
+            turn = int(turn_idx[i])
+            traj_to_turns.setdefault(traj, {}).setdefault(turn, []).append(i)
+
+        for _, turns in traj_to_turns.items():
+            ordered_turns = sorted(turns.keys())
+            rep_indices = [turns[t][0] for t in ordered_turns]
+            rewards_seq = turn_rewards[rep_indices]
+            values_seq = turn_values[rep_indices]
+            done_seq = [bool(dones[i]) for i in rep_indices]
+
+            lastgaelam = zero
+            adv_seq = torch.zeros(len(ordered_turns), device=device, dtype=dtype)
+
+            for j in reversed(range(len(ordered_turns))):
+                done = done_seq[j]
+                if (j + 1 < len(ordered_turns)) and (not done):
+                    next_value = values_seq[j + 1]
+                else:
+                    next_value = zero
+                delta = rewards_seq[j] + gamma_f * next_value - values_seq[j]
+                if done:
+                    lastgaelam = delta
+                else:
+                    lastgaelam = delta + gamma_f * lam_f * lastgaelam
+                adv_seq[j] = lastgaelam
+
+            ret_seq = adv_seq + values_seq
+
+            for j, turn in enumerate(ordered_turns):
+                idxs = turns[turn]
+                turn_adv_raw[idxs] = adv_seq[j]
+                turn_returns[idxs] = ret_seq[j]
+
+        turn_adv = verl_F.masked_whiten(turn_adv_raw, turn_has_tokens.to(dtype=dtype))
+        advantages = turn_adv.unsqueeze(-1) * response_mask
+
+        value_mask = torch.zeros_like(response_mask)
+        value_mask[:, 0] = response_mask[:, 0]
+        returns = turn_returns.unsqueeze(-1) * response_mask
+
+    return advantages, returns, value_mask
+
+
 def compute_hier_gae_advantage_return(
     rewards: torch.Tensor,        # shape: (B, T)
     v_low: torch.Tensor,          # shape: (B, T + 1)

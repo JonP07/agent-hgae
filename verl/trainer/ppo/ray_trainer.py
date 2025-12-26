@@ -89,6 +89,7 @@ class AdvantageEstimator(str, Enum):
     """
 
     GAE = "gae"
+    TURN_GAE = "turn_gae"
     GRPO = "grpo"
     REINFORCE_PLUS_PLUS = "reinforce_plus_plus"
     REINFORCE_PLUS_PLUS_BASELINE = "reinforce_plus_plus_baseline"
@@ -283,6 +284,27 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
                 kwargs.get("pf_ppo_reweight_method", "pow"),
                 kwargs.get("pf_ppo_weight_pow", 2.0),
             )
+    elif adv_estimator == AdvantageEstimator.TURN_GAE:
+        if "values" not in data.batch:
+            raise ValueError("turn_gae requires a single-head critic; set use_two_heads_critic/use_three_heads_critic to False.")
+        traj_ids = data.non_tensor_batch.get("traj_uid", None)
+        turn_idx = data.non_tensor_batch.get("turn_idx", None)
+        dones = data.non_tensor_batch.get("dones", None)
+        if traj_ids is None or turn_idx is None or dones is None:
+            raise ValueError("turn_gae requires non_tensor_batch keys: traj_uid, turn_idx, dones.")
+        advantages, returns, value_mask = core_algos.compute_turn_gae_advantage_return(
+            token_level_rewards=data.batch["token_level_rewards"],
+            values=data.batch["values"],
+            response_mask=data.batch["response_mask"],
+            traj_ids=traj_ids,
+            turn_idx=turn_idx,
+            dones=dones,
+            gamma=gamma,
+            lam=lam,
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
+        data.batch["value_mask_low"] = value_mask
     elif adv_estimator == AdvantageEstimator.GRPO:
         # TODO: test on more adv estimator type
         grpo_calculation_mask = data.batch["response_mask"]
@@ -446,7 +468,8 @@ class RayPPOTrainer:
             self.kl_ctrl_in_reward = core_algos.get_kl_controller(config.algorithm.kl_ctrl)
 
         if self.config.algorithm.adv_estimator in [
-            AdvantageEstimator.GAE, 
+            AdvantageEstimator.GAE,
+            AdvantageEstimator.TURN_GAE,
             AdvantageEstimator.HGAE
         ]:
             self.use_critic = True
@@ -575,7 +598,7 @@ class RayPPOTrainer:
         # check multi_turn with tool config
         if config.actor_rollout_ref.rollout.multi_turn.enable:
             assert config.actor_rollout_ref.rollout.multi_turn.tool_config_path is not None, "tool_config_path must be set when enabling multi_turn with tool, due to no role-playing support"
-            assert config.algorithm.adv_estimator in [AdvantageEstimator.GRPO], "only GRPO is tested for multi-turn with tool"
+            assert config.algorithm.adv_estimator in [AdvantageEstimator.GRPO, AdvantageEstimator.TURN_GAE], "only GRPO and turn_gae are tested for multi-turn with tool"
 
         print("[validate_config] All configuration checks passed successfully!")
 

@@ -312,3 +312,11 @@ AttributeError: '_thread.RLock' object has no attribute '_recursion_count'
 [36m(TaskRunner pid=2056864)[0m Training Progress:  19%|█▊        | 28/150 [8:00:40<36:11:06, 1067.76s/it]
 [36m(TaskRunner pid=2056864)[0m Training Progress:  19%|█▉        | 29/150 [8:17:51<35:31:11, 1056.79s/it]
 [36m(TaskRunner pid=2056864)[0m Training Progress:  20%|██        | 30/150 [8:44:49<40:50:34, 1225.29s/it]
+*** SIGTERM received at time=1766769143 on cpu 48 ***
+PC: @     0x7fbdf9975628  (unknown)  pthread_cond_timedwait@@GLIBC_2.3.2
+    @     0x7fbdf9979990  (unknown)  (unknown)
+    @        0x100000000  (unknown)  (unknown)
+[2025-12-26 11:12:23,628 E 2048252 2048252] logging.cc:474: *** SIGTERM received at time=1766769143 on cpu 48 ***
+[2025-12-26 11:12:23,628 E 2048252 2048252] logging.cc:474: PC: @     0x7fbdf9975628  (unknown)  pthread_cond_timedwait@@GLIBC_2.3.2
+[2025-12-26 11:12:23,636 E 2048252 2048252] logging.cc:474:     @     0x7fbdf9979990  (unknown)  (unknown)
+[2025-12-26 11:12:23,653 E 2048252 2048252] logging.cc:474:     @        0x100000000  (unknown)  (unknown)

@@ -1,21 +1,23 @@
-#!/bin/bash -l
-#SBATCH --time=24:00:00
-#SBATCH --ntasks=1
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=peng0504@umn.edu
-#SBATCH -p mhong
-#SBATCH --gres=gpu:h100:4
+source /code/hongpaul-sandbox/options/miniconda3/bin/activate /code/hongpaul-sandbox/options/miniconda3/envs/options
+
+cd /code/hongpaul-sandbox/temp/agent-hgae/
+
+wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
 
 set -x
 ENGINE=${1:-vllm}
-# export CUDA_VISIBLE_DEVICES=0,1,2,3
+SEED=${2:-0}
+shift 2 || true
+
+mkdir -p logs
+# LOGFILE="logs/hgae_qwen2.5_7b_seed${SEED}.txt"
+# export PYTHONUNBUFFERED=1
+# exec > "$LOGFILE" 2>&1
+
+export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
+echo "ALFWORLD_DATA set to $ALFWORLD_DATA"
+
 export VLLM_ATTENTION_BACKEND=XFORMERS
-# export ALFWORLD_DATA=/code/hongpaul-sandbox/temp/hierarchy_agent/alfworld_data
-# export RAY_worker_register_timeout_seconds=600
-
-# echo "ALFWORLD_DATA set to $ALFWORLD_DATA"
-
-# wandb login b8f38344ec7231ee89baa74ef7209dd5a43df6b2
 export WANDB_ENTITY=mhong-university-of-minnesota
 
 num_cpus_per_env_worker=0.1 # The CPU resource allocated for each environment worker. If you want to use less CPU resources, you can decrease this value.
@@ -40,7 +42,7 @@ python3 -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.return_raw_chat=True \
-    actor_rollout_ref.model.path=Qwen/Qwen2.5-1.5B-Instruct \
+    actor_rollout_ref.model.path=Qwen/Qwen2.5-7B-Instruct \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
@@ -66,27 +68,25 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.invalid_action_penalty_coef=0.1 \
     critic.optim.lr=1e-5 \
     critic.model.use_remove_padding=True \
-    critic.model.path=Qwen/Qwen2.5-1.5B-Instruct \
+    critic.model.path=Qwen/Qwen2.5-7B-Instruct \
     critic.model.enable_gradient_checkpointing=True \
     critic.ppo_micro_batch_size_per_gpu=16 \
     critic.model.fsdp_config.param_offload=False \
     critic.model.fsdp_config.optimizer_offload=False \
-    critic.use_two_heads_critic=False \
-    critic.use_three_heads_critic=True \
+    critic.use_two_heads_critic=True \
     algorithm.use_kl_in_reward=False \
     algorithm.hgae.norm_adv=True \
-    algorithm.hgae.keep_penalty=-0.01 \
-    algorithm.hgae.keep_penalty_skip_first=True \
+    reward_model.reward_manager=multi_turn \
     env.env_name=alfworld/AlfredTWEnvOptions \
-    env.seed=2 \
+    env.seed=$SEED \
     env.max_steps=50 \
     env.resources_per_worker.num_cpus=$num_cpus_per_env_worker \
-    reward_model.reward_manager=multi_turn \
+    trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.log_val_generations=10 \
+    trainer.log_val_generations=1 \
     trainer.project_name='verl_agent_alfworld' \
-    trainer.experiment_name='hgae_qwen2.5_1.5b_seed_1_regterm' \
-    trainer.n_gpus_per_node=8 \
+    trainer.experiment_name="hgae_qwen2.5_7b_seed_${SEED}_norm" \
+    trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
     trainer.test_freq=5 \
