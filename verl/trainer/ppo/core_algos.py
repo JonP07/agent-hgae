@@ -154,7 +154,7 @@ def compute_turn_gae_advantage_return(
 
         turn_has_tokens = response_mask.sum(dim=1) > 0
         turn_rewards = (token_level_rewards * response_mask).sum(dim=1)
-        first_token_values = values[:, 0]
+        first_token_values = values[:, 0].to(dtype)
         turn_values = torch.where(turn_has_tokens, first_token_values, torch.zeros_like(first_token_values))
 
         turn_adv_raw = torch.zeros_like(turn_values)
