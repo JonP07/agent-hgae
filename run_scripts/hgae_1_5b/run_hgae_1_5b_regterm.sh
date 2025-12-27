@@ -77,7 +77,7 @@ python3 -m verl.trainer.main_ppo \
     critic.use_three_heads_critic=True \
     algorithm.use_kl_in_reward=False \
     algorithm.hgae.norm_adv=True \
-    algorithm.hgae.keep_penalty=-0.01 \
+    algorithm.hgae.keep_penalty=-0.1 \
     algorithm.hgae.keep_penalty_skip_first=True \
     env.env_name=alfworld/AlfredTWEnvOptions \
     env.seed=$SEED \

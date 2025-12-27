@@ -136,3 +136,16 @@ AttributeError: '_thread.RLock' object has no attribute '_recursion_count'
 [36m(TaskRunner pid=1309054)[0m Training Progress:   1%|▏         | 2/150 [04:39<5:43:42, 139.34s/it]
 [36m(TaskRunner pid=1309054)[0m Training Progress:   2%|▏         | 3/150 [06:58<5:41:53, 139.54s/it]
 [36m(TaskRunner pid=1309054)[0m Training Progress:   3%|▎         | 4/150 [09:16<5:38:01, 138.91s/it]
+[36m(TaskRunner pid=1309054)[0m Training Progress:   3%|▎         | 5/150 [13:17<7:04:05, 175.49s/it]
+[36m(TaskRunner pid=1309054)[0m Training Progress:   4%|▍         | 6/150 [15:30<6:26:28, 161.03s/it]
+[36m(TaskRunner pid=1309054)[0m Training Progress:   5%|▍         | 7/150 [17:43<6:02:11, 151.97s/it]
+[36m(TaskRunner pid=1309054)[0m Training Progress:   5%|▌         | 8/150 [20:10<5:56:05, 150.46s/it]
+[36m(TaskRunner pid=1309054)[0m Training Progress:   6%|▌         | 9/150 [22:41<5:54:11, 150.72s/it]
+*** SIGTERM received at time=1766796590 on cpu 113 ***
+PC: @     0x7f258b41e628  (unknown)  pthread_cond_timedwait@@GLIBC_2.3.2
+    @     0x7f258b422990  (unknown)  (unknown)
+    @        0x100000000  (unknown)  (unknown)
+[2025-12-26 18:49:50,682 E 1300617 1300617] logging.cc:474: *** SIGTERM received at time=1766796590 on cpu 113 ***
+[2025-12-26 18:49:50,682 E 1300617 1300617] logging.cc:474: PC: @     0x7f258b41e628  (unknown)  pthread_cond_timedwait@@GLIBC_2.3.2
+[2025-12-26 18:49:50,688 E 1300617 1300617] logging.cc:474:     @     0x7f258b422990  (unknown)  (unknown)
+[2025-12-26 18:49:50,694 E 1300617 1300617] logging.cc:474:     @        0x100000000  (unknown)  (unknown)

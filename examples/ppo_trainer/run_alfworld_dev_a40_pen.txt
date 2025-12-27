@@ -185,3 +185,10 @@ AttributeError: '_thread.RLock' object has no attribute '_recursion_count'
 [36m(TaskRunner pid=2269770)[0m Training Progress:  18%|█▊        | 27/150 [6:39:39<28:50:07, 843.96s/it]
 [36m(TaskRunner pid=2269770)[0m Training Progress:  19%|█▊        | 28/150 [6:52:17<27:43:24, 818.07s/it]
 [36m(TaskRunner pid=2269770)[0m Training Progress:  19%|█▉        | 29/150 [7:05:16<27:06:40, 806.62s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  20%|██        | 30/150 [7:24:32<30:22:52, 911.44s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  21%|██        | 31/150 [7:36:57<28:28:10, 861.26s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  21%|██▏       | 32/150 [7:48:23<26:30:22, 808.67s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  22%|██▏       | 33/150 [7:59:38<24:58:55, 768.68s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  23%|██▎       | 34/150 [8:12:05<24:33:18, 762.06s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  23%|██▎       | 35/150 [8:31:41<28:19:08, 886.51s/it]
+[36m(TaskRunner pid=2269770)[0m Training Progress:  24%|██▍       | 36/150 [8:43:33<26:24:39, 834.03s/it]
